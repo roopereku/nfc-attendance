@@ -1,0 +1,10 @@
+services:
+  web:
+    build: ./web
+    working_dir: /backend
+    command: npm run web
+    volumes:
+      - ./web/frontend:/frontend
+      - ./web/backend:/backend
+    ports:
+      - "3000:3000"
