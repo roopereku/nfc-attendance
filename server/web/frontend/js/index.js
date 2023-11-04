@@ -1,6 +1,12 @@
 let courses = {}
 
-function startViewing(e)
+function launchDashboard()
+{
+	// Redirect the user to the dashboard page.
+	location.href = "/dashboard"
+}
+
+function startViewing()
 {
 	// Redirect the user to the viewing page.
 	const start = document.getElementById("start-button")

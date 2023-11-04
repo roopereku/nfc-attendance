@@ -19,6 +19,10 @@ app.get("/", (req, res) => {
 	res.sendFile("/frontend/html/index.html")
 })
 
+app.get("/dashboard", (req, res) => {
+	res.sendFile("/frontend/html/dashboard.html")
+})
+
 app.get("/view/:courseId", (req, res) => {
 	// TODO: Send ID as well.
 	res.sendFile("/frontend/html/view.html")
