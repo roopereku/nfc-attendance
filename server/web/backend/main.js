@@ -1,6 +1,30 @@
 const express = require("express")
+const https = require("https")
+const fs = require("fs")
+
 const app = express()
-const port = 3000
+const server = initServer()
+
+function ensurePathExists(path)
+{
+	if(!fs.existsSync(path))
+	{
+		console.error(path + " does not exist")
+		process.exit(1)
+	}
+}
+
+function initServer()
+{
+	ensurePathExists("/backend/cert")
+	ensurePathExists("/backend/cert/key.pem")
+	ensurePathExists("/backend/cert/cert.pem")
+
+	const key = fs.readFileSync('/backend/cert/key.pem');
+	const cert = fs.readFileSync('/backend/cert/cert.pem');
+
+	return https.createServer({key: key, cert: cert }, app);
+}
 
 let courses = {
 	"ABCD1" : {
@@ -32,5 +56,5 @@ app.get("/courses", (req, res) => {
 	res.send(JSON.stringify(courses))
 })
 
-app.listen(port, () => {
+server.listen(3000, () => {
 })
