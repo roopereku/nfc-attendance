@@ -1,10 +1,16 @@
-const bodyParser = require('body-parser')
+const webSocket = require("websocket").server;
+const bodyParser = require("body-parser")
 const express = require("express")
 const https = require("https")
 const fs = require("fs")
 
 const app = express()
 const server = initServer()
+
+const ws = new webSocket({
+	httpServer: server,
+	autoAcceptConnections: false
+})
 
 function ensurePathExists(path)
 {
@@ -85,6 +91,21 @@ app.get("/view/:courseId", (req, res) => {
 
 app.get("/courses", (req, res) => {
 	res.send(JSON.stringify(courses))
+})
+
+ws.on("request", (req) => {
+	// TODO: Handle origin.
+	const connection = req.accept('', req.origin)
+	console.log("New ws connection from", connection.remoteAddress)
+
+	connection.on("message", (msg) => {
+		console.log("Message from ws client", msg.utf8Data)
+		connection.sendUTF(msg.utf8Data)
+	})
+
+	connection.on("close", (reason, description) => {
+        console.log("Ws client", connection.remoteAddress, "disconnected");
+	})
 })
 
 server.listen(3000, () => {
