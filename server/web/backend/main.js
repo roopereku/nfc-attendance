@@ -1,3 +1,4 @@
+const bodyParser = require('body-parser')
 const express = require("express")
 const https = require("https")
 const fs = require("fs")
@@ -36,8 +37,27 @@ let courses = {
 	}
 }
 
+function setUserState(courseId, userId, state)
+{
+	console.log("Set state", state, "for", userId, "in", courseId)
+}
+
+function validateCourse(req, res)
+{
+	if(req.params.courseId in courses)
+	{
+		return true
+	}
+
+	res.status(404)
+	res.send("Invalid course")
+
+	return false
+}
+
 app.use(express.static("/frontend"))
 app.use(express.static("/backend/node_modules/bootstrap/dist/"))
+app.use(bodyParser.json())
 
 app.get("/", (req, res) => {
 	res.sendFile("/frontend/html/index.html")
@@ -47,9 +67,20 @@ app.get("/dashboard", (req, res) => {
 	res.sendFile("/frontend/html/dashboard.html")
 })
 
+app.post("/setUserState/:courseId", (req, res) => {
+	// TODO: Make sure that whoever made the request is a permitted endpoint.
+	if(validateCourse(req, res))
+	{
+		res.status(200)
+	}
+})
+
 app.get("/view/:courseId", (req, res) => {
-	// TODO: Send ID as well.
-	res.sendFile("/frontend/html/view.html")
+	if(validateCourse(req, res))
+	{
+		// TODO: Send ID as well.
+		res.sendFile("/frontend/html/view.html")
+	}
 })
 
 app.get("/courses", (req, res) => {
