@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -24,25 +25,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.concurrent.thread
 
 fun sendGet(urlString: String) {
-    val prefix = "https://"
+    //val prefix = "https://"
+    val prefix = "http://"
     val url = URL(if(urlString.startsWith(prefix)) urlString else "$prefix$urlString")
 
-    Log.i("HTTPS", "Send request to $url")
+    Log.i("REQUEST", "Send GET request to $url")
 
-    with(url.openConnection() as HttpURLConnection) {
-        requestMethod = "GET"  // optional default is GET
-
-        Log.i("HTTPS", "\nSent 'GET' request to URL : $url; Response Code : $responseCode")
-
-        inputStream.bufferedReader().use {
-            it.lines().forEach { line ->
-                Log.i("HTTPS LINE", line)
-            }
+    thread {
+        val json = try {
+            url.readText()
         }
+        catch(e: Exception) {
+            Log.i("REQUEST", "Got exception $e")
+            return@thread
+        }
+
+        Log.i("REQUEST", "Got result $json")
     }
 }
 
