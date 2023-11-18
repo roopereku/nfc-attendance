@@ -1,15 +1,15 @@
 version: '3'
 
 services:
-  #backend:
-  #  build: ./backend
-  #  working_dir: /backend
-  #  command: npm run web
-  #  volumes:
-  #    - ./web/frontend:/frontend
-  #    - ./web/backend:/backend
-  #  ports:
-  #    - "3060:3000"
+  backend:
+    build: ./backend
+    working_dir: /backend
+    command: npm run web
+    volumes:
+      - ./frontend:/frontend
+      - ./backend:/backend
+    ports:
+      - "3060:3000"
 
   nginx:
     image: nginx:latest
