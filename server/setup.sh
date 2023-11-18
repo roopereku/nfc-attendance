@@ -14,7 +14,7 @@ mkdir -p certbot/conf
 mkdir -p nginx
 
 # Instantiate the Nginx configuration with the given domain name.
-sed template/nginx -e "s/__CONFIG_DOMAIN__/$DOMAIN_NAME/g" > nginx/nginx.conf
+sed template/nginx.conf -e "s/__CONFIG_DOMAIN__/$DOMAIN_NAME/g" > nginx/nginx.conf
 
 # Startup Nginx for certbot challenge.
 docker compose up -d nginx
