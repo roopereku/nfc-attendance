@@ -1,10 +1,33 @@
+version: '3'
+
 services:
-  web:
-    build: ./web
-    working_dir: /backend
-    command: npm run web
-    volumes:
-      - ./web/frontend:/frontend
-      - ./web/backend:/backend
+  #backend:
+  #  build: ./backend
+  #  working_dir: /backend
+  #  command: npm run web
+  #  volumes:
+  #    - ./web/frontend:/frontend
+  #    - ./web/backend:/backend
+  #  ports:
+  #    - "3060:3000"
+
+  nginx:
+    image: nginx:latest
     ports:
-      - "3000:3000"
+      - 3080:80
+      - 443:443
+    restart: always
+    volumes:
+      - ./nginx/:/etc/nginx/:rw
+      - ./certbot/www/:/var/www/certbot/:ro
+      - ./certbot/conf/:/etc/nginx/ssl/:ro
+
+  certbot:
+    image: certbot/certbot:latest
+
+    profiles:
+      - donotstart
+
+    volumes:
+      - ./certbot/www/:/var/www/certbot/:rw
+      - ./certbot/conf/:/etc/letsencrypt/:rw
