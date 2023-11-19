@@ -3,8 +3,6 @@ const bodyParser = require("body-parser")
 const express = require("express")
 const fs = require("fs")
 
-const app = express()
-
 let courses = {
 	"ABCD1" : {
 		name: "Test course 1"
@@ -20,9 +18,9 @@ function setUserState(courseId, userId, state)
 	console.log("Set state", state, "for", userId, "in", courseId)
 }
 
-function validateCourse(req, res)
+function validateCourse(id, res)
 {
-	if(req.params.courseId in courses)
+	if(id in courses)
 	{
 		return true
 	}
@@ -33,9 +31,16 @@ function validateCourse(req, res)
 	return false
 }
 
+const app = express()
+
 app.use(express.static("/frontend"))
 app.use(express.static("/backend/node_modules/bootstrap/dist/"))
+
 app.use(bodyParser.json())
+app.use(function(err, req, res, next) {
+	console.log("Got error", err)
+	res.status(500)
+});
 
 app.get("/", (req, res) => {
 	res.sendFile("/frontend/html/index.html")
@@ -45,16 +50,28 @@ app.get("/dashboard", (req, res) => {
 	res.sendFile("/frontend/html/dashboard.html")
 })
 
-app.post("/setUserState/:courseId", (req, res) => {
-	// TODO: Make sure that whoever made the request is a permitted endpoint.
-	if(validateCourse(req, res))
+app.post("/endpoint/register", (req, res) => {
+	console.log("Endpoint register", req.headers)
+
+	// TODO: Make sure that the body contains courseId.
+	if(validateCourse(req.body.courseId, res))
 	{
-		res.status(200)
+		// TODO: Make sure that the endpoint is permitted for this course.
 	}
+
+	res.status(200)
+	res.send("VALID")
+})
+
+app.post("/endpoint/setUserState/", (req, res) => {
+	// TODO: Make sure that whoever made the request is a permitted endpoint.
+	console.log(req.body)
+	res.status(200)
+	res.send("VALID")
 })
 
 app.get("/view/:courseId", (req, res) => {
-	if(validateCourse(req, res))
+	if(validateCourse(req.params.courseId, res))
 	{
 		// TODO: Send ID as well.
 		res.sendFile("/frontend/html/view.html")
