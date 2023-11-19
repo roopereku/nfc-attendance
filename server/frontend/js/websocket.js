@@ -1,5 +1,4 @@
-const protocol = location.protocol === "https:" ? "wss" : "ws"
-const ws = new WebSocket(protocol + "://localhost:3000");
+const ws = new WebSocket("wss://" + location.hostname);
 
 ws.addEventListener("open", (e) => {
 	ws.send("Connected!");

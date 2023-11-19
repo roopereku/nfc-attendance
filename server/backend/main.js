@@ -1,37 +1,9 @@
 const webSocket = require("websocket").server;
 const bodyParser = require("body-parser")
 const express = require("express")
-const https = require("https")
 const fs = require("fs")
 
 const app = express()
-const server = initServer()
-
-const ws = new webSocket({
-	httpServer: server,
-	autoAcceptConnections: false
-})
-
-function ensurePathExists(path)
-{
-	if(!fs.existsSync(path))
-	{
-		console.error(path + " does not exist")
-		process.exit(1)
-	}
-}
-
-function initServer()
-{
-	ensurePathExists("/backend/cert")
-	ensurePathExists("/backend/cert/key.pem")
-	ensurePathExists("/backend/cert/cert.pem")
-
-	const key = fs.readFileSync('/backend/cert/key.pem');
-	const cert = fs.readFileSync('/backend/cert/cert.pem');
-
-	return https.createServer({key: key, cert: cert }, app);
-}
 
 let courses = {
 	"ABCD1" : {
@@ -93,6 +65,14 @@ app.get("/courses", (req, res) => {
 	res.send(JSON.stringify(courses))
 })
 
+const server = app.listen(3000, () => {
+})
+
+const ws = new webSocket({
+	httpServer: server,
+	autoAcceptConnections: false
+})
+
 ws.on("request", (req) => {
 	// TODO: Handle origin.
 	const connection = req.accept('', req.origin)
@@ -106,7 +86,4 @@ ws.on("request", (req) => {
 	connection.on("close", (reason, description) => {
         console.log("Ws client", connection.remoteAddress, "disconnected");
 	})
-})
-
-server.listen(3000, () => {
 })
