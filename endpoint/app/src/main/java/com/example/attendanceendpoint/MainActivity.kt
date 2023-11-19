@@ -1,13 +1,13 @@
 package com.example.attendanceendpoint
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.nfc.NfcAdapter
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -25,26 +25,56 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
 
-fun sendGet(urlString: String) {
-    //val prefix = "https://"
-    val prefix = "http://"
-    val url = URL(if(urlString.startsWith(prefix)) urlString else "$prefix$urlString")
-
-    Log.i("REQUEST", "Send GET request to $url")
+fun sendRequest(serverUrl: String, callback: (client: HttpURLConnection, hasResult: Boolean) -> Unit) {
+    val prefix = "https://"
+    val url = URL(if(serverUrl.startsWith(prefix)) serverUrl else "$prefix$serverUrl")
 
     thread {
-        val json = try {
-            url.readText()
-        }
-        catch(e: Exception) {
-            Log.i("REQUEST", "Got exception $e")
-            return@thread
-        }
+        with(url.openConnection() as HttpURLConnection) {
+            println("Before result")
+            callback.invoke(this, false)
 
-        Log.i("REQUEST", "Got result $json")
+            inputStream.bufferedReader().use {
+                it.lines().forEach { line ->
+                    println(line)
+                }
+            }
+
+            println("After result")
+            callback.invoke(this, true)
+        }
+    }
+}
+
+fun sendGetRequest(serverUrl: String, callback: (client: HttpURLConnection) -> Unit) {
+    sendRequest(serverUrl) { http, _ ->
+        http.requestMethod = "GET"
+    }
+}
+
+fun sendPostRequest(serverUrl: String, json: String, callback: (client: HttpURLConnection) -> Unit) {
+    sendRequest(serverUrl) { http, hasResult ->
+        if(!hasResult) {
+            http.requestMethod = "POST"
+            http.setRequestProperty("Accept", "application/json")
+            http.setRequestProperty("Content-Type", "application/json")
+            http.doOutput = true
+
+            val output = http.outputStream
+            val writer = OutputStreamWriter(output, "UTF-8")
+
+            writer.write(json)
+            writer.flush()
+            writer.close()
+
+        } else {
+            callback(http)
+        }
     }
 }
 
@@ -80,6 +110,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
 
+        if(!readyForTags)
+        {
+            return
+        }
+
         Log.i("STATUS", "Got intent")
 
         if (NfcAdapter.ACTION_TAG_DISCOVERED == intent?.action) {
@@ -89,15 +124,33 @@ class MainActivity : ComponentActivity() {
                 st = msg.joinToString(separator = ":"){ eachByte -> "%02x".format(eachByte) }
             }
 
-            setContent {
-                TagDetected(st)
+            val prefs = getSharedPreferences("ConfigurationPreferences", 0)
+            val address : String = prefs.getString("ServerAddress", "")!!
+
+            if(address.isEmpty()) {
+                Log.e("STATUS", "Server address is empty")
+                return
             }
 
-            Handler().postDelayed({
-                setContent {
-                    StandbyMode()
-                }
-            }, 3000)
+            val json = """
+            {
+                "tag": $st
+            }
+            """.trimIndent()
+
+            sendPostRequest("$address/endpoint/setUserState", json) {
+                println("Got result ${it.responseCode}")
+            }
+
+            //setContent {
+            //    TagDetected(st)
+            //}
+
+            //Handler().postDelayed({
+            //    setContent {
+            //        StandbyMode()
+            //    }
+            //}, 3000)
         }
     }
 
@@ -130,14 +183,25 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         nfc?.enableForegroundDispatch(this, pendingIntent, null, null)
     }
+
+    fun startAcceptingTags() {
+        readyForTags = true
+
+        setContent {
+            StandbyMode()
+        }
+    }
+
+    private var readyForTags = false
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConfigurationView() {
-    val prefs = LocalContext.current.getSharedPreferences("ConfigurationPreferences", 0)
-
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
     val default : String = prefs.getString("ServerAddress", "")!!
+
     var text by remember { mutableStateOf(default) }
 
     Column {
@@ -152,7 +216,16 @@ fun ConfigurationView() {
             editor.putString("ServerAddress", text);
             editor.apply();
 
-            sendGet(text)
+            sendPostRequest("$text/endpoint/register", "{}") {
+                println("After register ${it.responseCode}")
+
+                if(it.responseCode == 200)
+                {
+                    val activity = context as MainActivity
+                    activity.startAcceptingTags()
+                }
+            }
+
         }) {
             Text("Filled")
         }
