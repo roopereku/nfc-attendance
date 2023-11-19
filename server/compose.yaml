@@ -8,13 +8,11 @@ services:
     volumes:
       - ./frontend:/frontend
       - ./backend:/backend
-    ports:
-      - "3060:3000"
 
   nginx:
     image: nginx:latest
     ports:
-      - 3080:80
+      - 80:80
       - 443:443
     restart: always
     volumes:

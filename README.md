@@ -6,9 +6,16 @@
 
 Make sure that docker and docker-compose are installed.
 
-To run, go to `nfc-attendance` and run
+Inside the `nfc-attendance` directory, do:
 
 ```
+# Go to the server directory.
 cd server
-docker compose up
+
+# Make the setup script executable and do setup.
+# This initialized the Nginx configuration and setups an SSL certificate.
+chmod +x setup.sh && ./setup.sh
+
+# Start the docker containers in background.
+docker compose up -d
 ```
