@@ -1,7 +1,6 @@
 package com.example.attendanceendpoint
 
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.nfc.NfcAdapter
 import android.os.Bundle
@@ -17,6 +16,7 @@ import androidx.compose.material3.MaterialTheme.typography
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,28 +25,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
 
-fun sendRequest(serverUrl: String, callback: (client: HttpURLConnection, hasResult: Boolean) -> Unit) {
+fun sendRequest(serverUrl: String, callback: (client: HttpURLConnection, result: String) -> Unit) {
     val prefix = "https://"
     val url = URL(if(serverUrl.startsWith(prefix)) serverUrl else "$prefix$serverUrl")
 
     thread {
         with(url.openConnection() as HttpURLConnection) {
-            println("Before result")
-            callback.invoke(this, false)
+            callback.invoke(this, "")
 
+            var result : String = ""
             inputStream.bufferedReader().use {
                 it.lines().forEach { line ->
-                    println(line)
+                    result += line
                 }
             }
 
-            println("After result")
-            callback.invoke(this, true)
+            callback.invoke(this, result)
         }
     }
 }
@@ -57,9 +58,9 @@ fun sendGetRequest(serverUrl: String, callback: (client: HttpURLConnection) -> U
     }
 }
 
-fun sendPostRequest(serverUrl: String, json: String, callback: (client: HttpURLConnection) -> Unit) {
-    sendRequest(serverUrl) { http, hasResult ->
-        if(!hasResult) {
+fun sendPostRequest(serverUrl: String, json: String, callback: (client: HttpURLConnection, result: String) -> Unit) {
+    sendRequest(serverUrl) { http, result ->
+        if(result.isEmpty()) {
             http.requestMethod = "POST"
             http.setRequestProperty("Accept", "application/json")
             http.setRequestProperty("Content-Type", "application/json")
@@ -73,7 +74,7 @@ fun sendPostRequest(serverUrl: String, json: String, callback: (client: HttpURLC
             writer.close()
 
         } else {
-            callback(http)
+            callback(http, result)
         }
     }
 }
@@ -134,23 +135,31 @@ class MainActivity : ComponentActivity() {
 
             val json = """
             {
-                "tag": $st
+                "endpointId" : "${prefs.getString("EndpointID", "")}",
+                "tag": "$st"
             }
             """.trimIndent()
 
-            sendPostRequest("$address/endpoint/setUserState", json) {
-                println("Got result ${it.responseCode}")
+            sendPostRequest("$address/endpoint/setUserState", json) { http, result ->
+                if(http.responseCode == 200) {
+                    val json = JSONObject(result)
+
+                    setContent {
+                        stateChanged("Hello ${json.getString("userName")}")
+
+                        Handler().postDelayed(
+                        {
+                            setContent {
+                                StandbyMode()
+                            }
+                        }, 2000)
+                    }
+                }
             }
 
             //setContent {
             //    TagDetected(st)
             //}
-
-            //Handler().postDelayed({
-            //    setContent {
-            //        StandbyMode()
-            //    }
-            //}, 3000)
         }
     }
 
@@ -216,14 +225,14 @@ fun ConfigurationView() {
             editor.putString("ServerAddress", text);
             editor.apply();
 
-            sendPostRequest("$text/endpoint/register", "{}") {
-                println("After register ${it.responseCode}")
+            sendPostRequest("$text/endpoint/register", "{}") { http, result ->
+                val json = JSONObject(result)
 
-                if(it.responseCode == 200)
-                {
-                    val activity = context as MainActivity
-                    activity.startAcceptingTags()
-                }
+                editor.putString("EndpointID", json.getString("endpointId"));
+                editor.apply();
+
+                val activity = context as MainActivity
+                activity.startAcceptingTags()
             }
 
         }) {
@@ -233,8 +242,8 @@ fun ConfigurationView() {
 }
 
 @Composable
-fun TagDetected(serialNumber: String) {
-    LargeText("Found tag $serialNumber")
+fun stateChanged(newState: String) {
+    LargeText(newState)
 }
 
 @Composable
