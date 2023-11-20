@@ -1,4 +1,5 @@
 const webSocket = require("websocket").server;
+const cookieParser = require("cookie-parser")
 const bodyParser = require("body-parser")
 const express = require("express")
 const fs = require("fs")
@@ -36,6 +37,7 @@ const app = express()
 app.use(express.static("/frontend"))
 app.use(express.static("/backend/node_modules/bootstrap/dist/"))
 
+app.use(cookieParser()); 
 app.use(bodyParser.json())
 app.use(function(err, req, res, next) {
 	console.log("Got error", err)
@@ -54,9 +56,23 @@ app.post("/endpoint/register", (req, res) => {
 	console.log("Endpoint register", req.headers)
 
 	// TODO: Make sure that the body contains courseId.
-	if(validateCourse(req.body.courseId, res))
+	//if(validateCourse(req.body.courseId, res))
+	//{
+	//	// TODO: Make sure that the endpoint is permitted for this course.
+	//}
+	//
+	console.log(req.cookies)
+
+	if("endpointId" in req.cookies)
 	{
-		// TODO: Make sure that the endpoint is permitted for this course.
+		const cookie = req.cookies.endpointId
+		console.log("Got ID", cookie)
+	}
+
+	else
+	{
+		console.log("Initialize id")
+		res.cookie("endpointId", "TEST-ID", { maxAge: 900000, httpOnly: true })
 	}
 
 	res.status(200)
