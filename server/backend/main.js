@@ -2,6 +2,7 @@ const webSocket = require("websocket").server;
 const cookieParser = require("cookie-parser")
 const bodyParser = require("body-parser")
 const express = require("express")
+const crypto = require("crypto")
 const fs = require("fs")
 
 let courses = {
@@ -53,37 +54,22 @@ app.get("/dashboard", (req, res) => {
 })
 
 app.post("/endpoint/register", (req, res) => {
-	console.log("Endpoint register", req.headers)
-
-	// TODO: Make sure that the body contains courseId.
-	//if(validateCourse(req.body.courseId, res))
-	//{
-	//	// TODO: Make sure that the endpoint is permitted for this course.
-	//}
-	//
-	console.log(req.cookies)
-
-	if("endpointId" in req.cookies)
-	{
-		const cookie = req.cookies.endpointId
-		console.log("Got ID", cookie)
-	}
-
-	else
-	{
-		console.log("Initialize id")
-		res.cookie("endpointId", "TEST-ID", { maxAge: 900000, httpOnly: true })
-	}
+	// TODO: Add the new endpoint into the database.
+	const id = crypto.randomBytes(16).toString("hex")
 
 	res.status(200)
-	res.send("VALID")
+	res.send(JSON.stringify({
+		endpointId: id
+	}))
 })
 
 app.post("/endpoint/setUserState/", (req, res) => {
 	// TODO: Make sure that whoever made the request is a permitted endpoint.
 	console.log(req.body)
 	res.status(200)
-	res.send("VALID")
+	res.send(JSON.stringify({
+		userName: "Test user"
+	}))
 })
 
 app.get("/view/:courseId", (req, res) => {
