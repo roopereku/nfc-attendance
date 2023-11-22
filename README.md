@@ -14,7 +14,7 @@ cd server
 
 # Make the setup script executable and do setup.
 # This initialized the Nginx configuration and setups an SSL certificate.
-chmod +x setup.sh && ./setup.sh
+chmod +x setup.sh && ./setup.sh mydomain.something
 
 # Start the docker containers in background.
 docker compose up -d
