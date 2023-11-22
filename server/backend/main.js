@@ -33,14 +33,31 @@ function validateCourse(id, res)
 	return false
 }
 
+function isValidSessionToken(token)
+{
+	// TODO: Ask the database if the given token is valid.
+	return true
+}
+
 function hasValidSessionToken(req)
 {
+	if(Array.isArray(req.cookies))
+	{
+		for(const i in req.cookies)
+		{
+			if(req.cookies[i].name === "sessionToken")
+			{
+				return isValidSessionToken(req.cookies[i].value)
+			}
+		}
+	}
+
 	if("sessionToken" in req.cookies)
 	{
-		// TODO: Validate session token.
-
-		return true
+		return isValidSessionToken(req.cookies.sessionToken)
 	}
+
+	return false
 }
 
 function validateLogin(req, res)
@@ -180,10 +197,16 @@ const ws = new webSocket({
 
 ws.on("request", (req) => {
 	// TODO: Handle origin.
+
+	// If no session token was provided, don't accept the connection.
+	if(!hasValidSessionToken(req))
+	{
+		console.log("Reject connection because it has no session token")
+		return
+	}
+
 	const connection = req.accept('', req.origin)
 	console.log("New ws connection from", connection.remoteAddress)
-
-	console.log(req.cookies)
 
 	connection.on("message", (msg) => {
 		console.log("Message from ws client", msg.utf8Data)
