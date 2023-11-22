@@ -33,8 +33,33 @@ function validateCourse(id, res)
 	return false
 }
 
+function hasValidSessionToken(req)
+{
+	if("sessionToken" in req.cookies)
+	{
+		// TODO: Validate session token.
+
+		return true
+	}
+}
+
+function validateLogin(req, res)
+{
+	if(hasValidSessionToken(req))
+	{
+		// TODO: Validate session token.
+
+		return true
+	}
+
+	// There is no valid session token.
+	res.redirect("/login")
+	return false
+}
+
 const app = express()
 
+// TODO: Only expose /frontend/js.
 app.use(express.static("/frontend"))
 app.use(express.static("/backend/node_modules/bootstrap/dist/"))
 
@@ -46,11 +71,84 @@ app.use(function(err, req, res, next) {
 });
 
 app.get("/", (req, res) => {
-	res.sendFile("/frontend/html/index.html")
+	if(validateLogin(req, res))
+	{
+		res.sendFile("/frontend/html/index.html")
+	}
+})
+
+app.post("/getSessionToken", (req, res) => {
+	if("username" in req.body && "password" in req.body)
+	{
+		// TODO: Store these in a database.
+		const defaultAdminUsername = "admin"
+		const defaultAdminPassword = "pass"
+
+		if(req.body.username === defaultAdminUsername)
+		{
+			// TODO: Hash the password and look for a match from the database.
+			const hashedDefault = crypto.createHash('md5').update(defaultAdminPassword).digest('hex');
+			const hashedPassword = crypto.createHash('md5').update(req.body.password).digest('hex');
+
+			if(hashedDefault === hashedPassword)
+			{
+				const token = crypto.randomBytes(16).toString("hex")
+
+				res.cookie("sessionToken", token, {
+					sameSite: "strict",
+					httpOnly: true
+				})
+
+				res.status(200)
+				res.send("Set token")
+
+				return
+			}
+		}
+
+		res.status(401)
+		res.send("Invalid credentials")
+	}
+
+	else
+	{
+		res.status(400)
+		res.send("Missing fields")
+	}
+})
+
+app.get("/login", (req, res) => {
+	// If the user is already logged in, go to the main page
+	if(hasValidSessionToken(req))
+	{
+		res.redirect("/")
+		return
+	}
+
+	// Show the login page.
+	res.sendFile("/frontend/html/login.html")
 })
 
 app.get("/dashboard", (req, res) => {
-	res.sendFile("/frontend/html/dashboard.html")
+	if(validateLogin(req, res))
+	{
+		res.sendFile("/frontend/html/dashboard.html")
+	}
+})
+
+app.get("/view/:courseId", (req, res) => {
+	if(validateLogin(req, res))
+	{
+		if(validateCourse(req.params.courseId, res))
+		{
+			// TODO: Send ID as well.
+			res.sendFile("/frontend/html/view.html")
+		}
+	}
+})
+
+app.get("/courses", (req, res) => {
+	res.send(JSON.stringify(courses))
 })
 
 app.post("/endpoint/register", (req, res) => {
@@ -72,18 +170,6 @@ app.post("/endpoint/setUserState/", (req, res) => {
 	}))
 })
 
-app.get("/view/:courseId", (req, res) => {
-	if(validateCourse(req.params.courseId, res))
-	{
-		// TODO: Send ID as well.
-		res.sendFile("/frontend/html/view.html")
-	}
-})
-
-app.get("/courses", (req, res) => {
-	res.send(JSON.stringify(courses))
-})
-
 const server = app.listen(3000, () => {
 })
 
@@ -96,6 +182,8 @@ ws.on("request", (req) => {
 	// TODO: Handle origin.
 	const connection = req.accept('', req.origin)
 	console.log("New ws connection from", connection.remoteAddress)
+
+	console.log(req.cookies)
 
 	connection.on("message", (msg) => {
 		console.log("Message from ws client", msg.utf8Data)
