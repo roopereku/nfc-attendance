@@ -1,6 +1,6 @@
-const webSocket = require("websocket").server;
 const cookieParser = require("cookie-parser")
 const bodyParser = require("body-parser")
+const websocket = require("express-ws")
 const express = require("express")
 const crypto = require("crypto")
 const fs = require("fs")
@@ -33,28 +33,14 @@ function validateCourse(id, res)
 	return false
 }
 
-function isValidSessionToken(token)
-{
-	// TODO: Ask the database if the given token is valid.
-	return true
-}
-
 function hasValidSessionToken(req)
 {
-	if(Array.isArray(req.cookies))
-	{
-		for(const i in req.cookies)
-		{
-			if(req.cookies[i].name === "sessionToken")
-			{
-				return isValidSessionToken(req.cookies[i].value)
-			}
-		}
-	}
-
 	if("sessionToken" in req.cookies)
 	{
-		return isValidSessionToken(req.cookies.sessionToken)
+		// TODO: Ask the database if the given token is valid.
+		// The token can be accessed through req.cookies.sessionToken.
+		
+		return true
 	}
 }
 
@@ -109,8 +95,9 @@ function validateLogin(req, res)
 }
 
 const app = express()
+const ws = websocket(app)
 
-// TODO: Only expose /frontend/js.
+// TODO: Serve files from Nginx?
 app.use(express.static("/frontend"))
 app.use(express.static("/backend/node_modules/bootstrap/dist/"))
 
@@ -190,12 +177,22 @@ app.get("/dashboard", (req, res) => {
 app.get("/view/:courseId", (req, res) => {
 	if(validateLogin(req, res))
 	{
-		if(validateCourse(req.params.courseId, res))
-		{
-			// TODO: Send ID as well.
-			res.sendFile("/frontend/html/view.html")
-		}
+		// TODO: Send ID as well.
+		res.sendFile("/frontend/html/view.html")
 	}
+})
+
+app.ws("/view/:courseId", (client, req) => {
+	// If no session token was provided, don't accept the connection.
+	if(!hasValidSessionToken(req))
+	{
+		console.log("Reject connection because it has no session token")
+		return
+	}
+
+	client.on('message', (msg) => {
+		console.log(msg)
+	});
 })
 
 app.get("/courses", (req, res) => {
@@ -250,33 +247,5 @@ app.post("/endpoint/setUserState/", (req, res) => {
 	}
 })
 
-const server = app.listen(3000, () => {
-})
-
-const ws = new webSocket({
-	httpServer: server,
-	autoAcceptConnections: false
-})
-
-ws.on("request", (req) => {
-	// TODO: Handle origin.
-
-	// If no session token was provided, don't accept the connection.
-	if(!hasValidSessionToken(req))
-	{
-		console.log("Reject connection because it has no session token")
-		return
-	}
-
-	const connection = req.accept('', req.origin)
-	console.log("New ws connection from", connection.remoteAddress)
-
-	connection.on("message", (msg) => {
-		console.log("Message from ws client", msg.utf8Data)
-		connection.sendUTF(msg.utf8Data)
-	})
-
-	connection.on("close", (reason, description) => {
-        console.log("Ws client", connection.remoteAddress, "disconnected");
-	})
+app.listen(3000, () => {
 })

@@ -1,3 +1,5 @@
+const websocketPath = "/view/" + "ABC1"
+
 function displayUser(userId, userName)
 {
 	const element = document.createElement("button")
