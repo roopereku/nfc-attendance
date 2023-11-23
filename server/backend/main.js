@@ -94,6 +94,32 @@ function validateLogin(req, res)
 	return false
 }
 
+function iterateWebsocketClients(tag, callback)
+{
+	ws.getWss().clients.forEach((client) => {
+		if(client.tag === tag)
+		{
+			callback(client)
+		}
+    });
+}
+
+function displayNewEndpoint(id)
+{
+	iterateWebsocketClients("dashboard", (client) => {
+		client.send(JSON.stringify({
+			status: "newEndpoint",
+			endpointId: id
+		}))
+	})
+}
+
+function displayAllWaitingEndpoints()
+{
+	iterateWebsocketClients("dashboard", (client) => {
+	})
+}
+
 const app = express()
 const ws = websocket(app)
 
@@ -174,6 +200,17 @@ app.get("/dashboard", (req, res) => {
 	}
 })
 
+app.ws("/dashboard", (client, req) => {
+	// If no session token was provided, don't accept the connection.
+	if(!hasValidSessionToken(req))
+	{
+		console.log("Reject connection because it has no session token")
+		return
+	}
+
+	client.tag = "dashboard"
+})
+
 app.get("/view/:courseId", (req, res) => {
 	if(validateLogin(req, res))
 	{
@@ -190,9 +227,7 @@ app.ws("/view/:courseId", (client, req) => {
 		return
 	}
 
-	client.on('message', (msg) => {
-		console.log(msg)
-	});
+	client.tag = "view"
 })
 
 app.get("/courses", (req, res) => {
@@ -228,6 +263,9 @@ app.post("/endpoint/register", (req, res) => {
 	res.send(JSON.stringify({
 		endpointId: id
 	}))
+
+	// Display the newly created endpoint on every active dashboard.
+	displayNewEndpoint(id)
 })
 
 app.post("/endpoint/join/", (req, res) => {

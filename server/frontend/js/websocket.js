@@ -8,5 +8,6 @@ ws.addEventListener("open", (e) => {
 });
 
 ws.addEventListener("message", (e) => {
-  console.log("Message from server ", e.data)
+	console.log("Message from server ", e.data)
+	onWebsocketMessage(JSON.parse(e.data))
 });

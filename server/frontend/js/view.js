@@ -5,6 +5,10 @@ function getCookieValue(name)
 
 const websocketPath = "/view/" + getCookieValue("courseId")
 
+function onWebsocketMessage(msg)
+{
+}
+
 function displayUser(userId, userName)
 {
 	const element = document.createElement("button")
