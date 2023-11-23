@@ -177,7 +177,7 @@ app.get("/dashboard", (req, res) => {
 app.get("/view/:courseId", (req, res) => {
 	if(validateLogin(req, res))
 	{
-		// TODO: Send ID as well.
+		res.cookie("courseId", req.params.courseId, { sameSite: "Strict" })
 		res.sendFile("/frontend/html/view.html")
 	}
 })

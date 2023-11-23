@@ -1,4 +1,9 @@
-const websocketPath = "/view/" + "ABC1"
+function getCookieValue(name)
+{
+	return document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)')?.pop() || ''
+}
+
+const websocketPath = "/view/" + getCookieValue("courseId")
 
 function displayUser(userId, userName)
 {
