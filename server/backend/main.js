@@ -209,6 +209,30 @@ app.ws("/dashboard", (client, req) => {
 	}
 
 	client.tag = "dashboard"
+
+	client.on("message", (msg) => {
+		try
+		{
+			cmd = JSON.parse(msg)
+
+			// TODO: Validate endpoint ID with validateEndpoint
+
+			if(cmd.status == "authorizeEndpoint")
+			{
+				// TODO: Set the status of the given endpoint to authorized.
+			}
+
+			else if(cmd.status == "blockEndpoint")
+			{
+				// TODO: Set the status of the given endpoint to blocked.
+			}
+		}
+
+		catch(err)
+		{
+			console.log("Error while parsing JSON sent by a dashboard user:", err)
+		}
+	})
 })
 
 app.get("/view/:courseId", (req, res) => {
@@ -252,6 +276,8 @@ app.post("/endpoint/register", (req, res) => {
 				endpointId: req.body.endpointId
 			}))
 		}
+
+		return
 	}
 
 	// TODO: Add the new endpoint into the database.
