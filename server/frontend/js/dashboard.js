@@ -5,7 +5,7 @@ function addWaitingEndpoint(id)
 	const endpointList = document.getElementById("endpointList")
 
 	const entry = document.createElement("div")
-	entry.className = "border border-secondary mx-1 my-1"
+	entry.className = "border border-secondary mx-1 my-1 waitingEndpoint"
 	entry.dataset.endpointId = id
 
 	const title = document.createElement("h5")
@@ -46,11 +46,29 @@ function addWaitingEndpoint(id)
 	endpointList.appendChild(entry)
 }
 
+function removeWaitingEndpoint(id)
+{
+	const endpoints = document.getElementsByClassName("waitingEndpoint")
+
+	for (const [key, value] of Object.entries(endpoints))
+	{
+		if(value.dataset.endpointId === id)
+		{
+			value.remove()
+		}
+	}
+}
+
 function onWebsocketMessage(msg)
 {
 	if(msg.status === "newEndpoint")
 	{
 		addWaitingEndpoint(msg.endpointId)
+	}
+
+	if(msg.status === "processedEndpoint")
+	{
+		removeWaitingEndpoint(msg.endpointId)
 	}
 }
 

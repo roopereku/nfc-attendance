@@ -115,6 +115,16 @@ function displayNewEndpoint(id)
 	})
 }
 
+function displayProcessedEndpoint(id)
+{
+	iterateWebsocketClients("dashboard", (client) => {
+		client.send(JSON.stringify({
+			status: "processedEndpoint",
+			endpointId: id
+		}))
+	})
+}
+
 function displayAllWaitingEndpoints()
 {
 	iterateWebsocketClients("dashboard", (client) => {
@@ -237,11 +247,13 @@ app.ws("/dashboard", (client, req) => {
 			if(cmd.status == "authorizeEndpoint")
 			{
 				// TODO: Set the status of the given endpoint to authorized.
+				displayProcessedEndpoint(cmd.endpointId)
 			}
 
 			else if(cmd.status == "blockEndpoint")
 			{
 				// TODO: Set the status of the given endpoint to blocked.
+				displayProcessedEndpoint(cmd.endpointId)
 			}
 		}
 
