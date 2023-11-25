@@ -3,6 +3,7 @@ const bodyParser = require("body-parser")
 const websocket = require("express-ws")
 const express = require("express")
 const crypto = require("crypto")
+const postgres = require("pg")
 const fs = require("fs")
 
 // List of active sessions. This information doesn't have to be stored in the
@@ -133,6 +134,14 @@ function displayAllWaitingEndpoints()
 
 const app = express()
 const ws = websocket(app)
+
+const db = new postgres.Client({
+	user: "nfcuser",
+	password: "nfcpass",
+	host: "postgres",
+	database: "nfcattendance",
+	port: 5432,
+})
 
 // TODO: Serve files from Nginx?
 app.use(express.static("/frontend"))
@@ -340,5 +349,15 @@ app.post("/endpoint/setUserState/", (req, res) => {
 	}
 })
 
+db.connect((err) => {
+	if (err)
+	{
+		throw err;
+	}
+
+	console.log("Connected to postgres")
+});
+
 app.listen(3000, () => {
+	console.log("Express is up")
 })

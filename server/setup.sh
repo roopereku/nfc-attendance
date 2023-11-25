@@ -11,6 +11,7 @@ fi
 # Create necessary files and directories.
 mkdir -p certbot/www
 mkdir -p certbot/conf
+mkdir -p postgres
 mkdir -p nginx
 
 # Instantiate the Nginx configuration with the given domain name.
