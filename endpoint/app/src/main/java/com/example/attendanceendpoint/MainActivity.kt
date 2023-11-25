@@ -6,45 +6,66 @@ import android.nfc.NfcAdapter
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme.typography
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.FileNotFoundException
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
 
-fun sendRequest(serverUrl: String, callback: (client: HttpURLConnection, result: String) -> Unit) {
+fun sendRequest(serverUrl: String, callback: (client: HttpURLConnection, result: String?) -> Unit) {
     val prefix = "https://"
     val url = URL(if(serverUrl.startsWith(prefix)) serverUrl else "$prefix$serverUrl")
 
     thread {
         with(url.openConnection() as HttpURLConnection) {
-            callback.invoke(this, "")
+            callback.invoke(this, null)
 
-            var result : String = ""
-            inputStream.bufferedReader().use {
-                it.lines().forEach { line ->
-                    result += line
+            var result : String? = ""
+
+            try {
+                inputStream.bufferedReader().use {
+                    it.lines().forEach { line ->
+                        result += line
+                    }
                 }
+            } catch(err: FileNotFoundException) {
+                println(err)
             }
 
             callback.invoke(this, result)
@@ -60,7 +81,7 @@ fun sendGetRequest(serverUrl: String, callback: (client: HttpURLConnection) -> U
 
 fun sendPostRequest(serverUrl: String, json: String, callback: (client: HttpURLConnection, result: String) -> Unit) {
     sendRequest(serverUrl) { http, result ->
-        if(result.isEmpty()) {
+        if(result == null) {
             http.requestMethod = "POST"
             http.setRequestProperty("Accept", "application/json")
             http.setRequestProperty("Content-Type", "application/json")
@@ -104,7 +125,7 @@ class MainActivity : ComponentActivity() {
         Log.i("NFC", "Adapter is valid")
 
         setContent {
-            ConfigurationView()
+            ConfigureConnection()
         }
     }
 
@@ -206,7 +227,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConfigurationView() {
+fun ConfigureConnection() {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
     val default : String = prefs.getString("ServerAddress", "")!!
@@ -225,18 +246,143 @@ fun ConfigurationView() {
             editor.putString("ServerAddress", text);
             editor.apply();
 
-            sendPostRequest("$text/endpoint/register", "{}") { http, result ->
-                val json = JSONObject(result)
+            var json = "{}"
 
-                editor.putString("EndpointID", json.getString("endpointId"));
-                editor.apply();
+            // If an ID is already stored, send it to the backend.
+            if(prefs.contains("EndpointID"))
+            {
+                json = """
+                {
+                    "endpointId" : "${prefs.getString("EndpointID", "")}"
+                }
+                """.trimIndent()
+            }
 
-                val activity = context as MainActivity
-                activity.startAcceptingTags()
+            sendPostRequest("$text/endpoint/register", json) { http, result ->
+                println("Got response ${http.responseCode}")
+
+                when(http.responseCode) {
+                    // "401 Unauthorized" indicates that this endpoint is blocked.
+                    401 -> {
+                        // TODO: Visually show blocked state.
+                        println("I am blocked :-(")
+                    }
+
+                    // "201 Created" indicates that this endpoint now waits for authorization.
+                    201 -> {
+                        val json = JSONObject(result)
+
+                        editor.putString("EndpointID", json.getString("endpointId"));
+                        editor.apply();
+
+                        // TODO: Visually show waiting state.
+                        println("I am waiting!")
+                    }
+
+                    // "200 OK" indicates that this endpoint is ready to join a course.
+                    200 -> {
+                        val json = JSONObject(result)
+
+                        val activity = context as MainActivity
+                        activity.setContent {
+                            ConfigureCourse(json.getJSONObject("availableCourses"))
+                        }
+
+                        //activity.startAcceptingTags()
+                    }
+                }
             }
 
         }) {
-            Text("Filled")
+            Text("Connect to the server")
+        }
+    }
+}
+
+@Composable
+fun ConfigureCourse(courses: JSONObject) {
+    val context = LocalContext.current
+    var ids = mutableListOf<String>()
+
+    for(key in courses.keys()) {
+        ids.add(key)
+    }
+
+    // TODO: Check if ids is empty.
+    var selected = ids[0]
+
+    Column {
+        ShowDropDownMenu(ids) {
+            println("Selected is now $it")
+            selected = it
+        }
+
+        Button(onClick = {
+            val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
+            val address: String = prefs.getString("ServerAddress", "")!!
+
+            if (address.isEmpty()) {
+                Log.e("STATUS", "Server address is empty")
+                return@Button
+            }
+
+            val json = """
+            {
+                "endpointId" : "${prefs.getString("EndpointID", "")}",
+                "courseId": "$selected"
+            }
+            """.trimIndent()
+
+            sendPostRequest("$address/endpoint/join", json) { http, result ->
+            }
+        }) {
+            Text("Join course")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ShowDropDownMenu(strings: List<String>, onSelected: (String) -> Unit) {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+    var selectedText by remember { mutableStateOf(strings[0]) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(32.dp)
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = {
+                expanded = !expanded
+            }
+        ) {
+            TextField(
+                value = selectedText,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier.menuAnchor()
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                strings.forEach { item ->
+                    DropdownMenuItem(
+                        text = { Text(text = item) },
+                        onClick = {
+                            selectedText = item
+                            expanded = false
+                            onSelected(item)
+                            Toast.makeText(context, item, Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            }
         }
     }
 }
