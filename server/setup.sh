@@ -25,3 +25,8 @@ docker compose run --rm  certbot certonly --webroot --webroot-path /var/www/cert
 
 # Shut down Nginx.
 docker compose down nginx
+
+# Run postgres once to make sure that it creates whatever metadata it needs.
+# Not doing so might lead to a delay in the database that Node doesn't like.
+docker compose up -d postgres
+docker compose down postgres 

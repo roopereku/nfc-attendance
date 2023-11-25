@@ -66,10 +66,15 @@ function onWebsocketMessage(msg)
 		addWaitingEndpoint(msg.endpointId)
 	}
 
-	if(msg.status === "processedEndpoint")
+	else if(msg.status === "processedEndpoint")
 	{
 		removeWaitingEndpoint(msg.endpointId)
 	}
-}
 
-addWaitingEndpoint("TESTID")
+	else if(msg.status === "waitingEndpointSync")
+	{
+		msg.endpoints.forEach((id) => {
+			addWaitingEndpoint(id)
+		})
+	}
+}
