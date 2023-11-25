@@ -25,17 +25,18 @@ function setUserState(courseId, userId, state)
 	console.log("Set state", state, "for", userId, "in", courseId)
 }
 
-function validateCourse(id, res)
+function validateCourse(id, res, callback)
 {
 	if(id in courses)
 	{
-		return true
+		callback()
 	}
 
-	res.status(404)
-	res.send("Invalid course")
-
-	return false
+	else
+	{
+		res.status(403)
+		res.send("Invalid course")
+	}
 }
 
 function hasValidSessionToken(req)
@@ -354,9 +355,8 @@ app.post("/endpoint/register", (req, res) => {
 
 				res.status(200)
 				res.send(JSON.stringify({
-					availableCourses: [
-						{ courseId: "SOMECOURSEID1", courseName: "SOMECOURSENAME1" }
-					]
+					// TODO: Get this information from the database.
+					availableCourses: courses
 				}))
 			}
 
@@ -401,6 +401,10 @@ app.post("/endpoint/register", (req, res) => {
 
 app.post("/endpoint/join/", (req, res) => {
 	validateEndpoint(req, res, (result) => {
+		validateCourse(req.body.courseId, res, () => 
+		{
+			console.log("Endpoint", req.body.endpointId, "Joins", req.body.courseId)
+		})
 	})
 })
 
