@@ -5,6 +5,10 @@ const express = require("express")
 const crypto = require("crypto")
 const fs = require("fs")
 
+// List of active sessions. This information doesn't have to be stored in the
+// database as it isn't persistent across multiple backend runs.
+let activeSessions = {}
+
 let courses = {
 	"ABCD1" : {
 		name: "Test course 1"
@@ -37,11 +41,10 @@ function hasValidSessionToken(req)
 {
 	if("sessionToken" in req.cookies)
 	{
-		// TODO: Ask the database if the given token is valid.
-		// The token can be accessed through req.cookies.sessionToken.
-		
-		return true
+		return req.cookies.sessionToken in activeSessions
 	}
+
+	return false
 }
 
 function validateEndpointIdFormat(id, res)
@@ -84,8 +87,6 @@ function validateLogin(req, res)
 {
 	if(hasValidSessionToken(req))
 	{
-		// TODO: Validate session token.
-
 		return true
 	}
 
@@ -142,6 +143,13 @@ app.get("/", (req, res) => {
 })
 
 app.post("/getSessionToken", (req, res) => {
+	if(hasValidSessionToken(req))
+	{
+		res.status(400)
+		res.send("Session token already exists")
+		return
+	}
+
 	if("username" in req.body && "password" in req.body)
 	{
 		// TODO: Store these in a database.
@@ -157,6 +165,14 @@ app.post("/getSessionToken", (req, res) => {
 			if(hashedDefault === hashedPassword)
 			{
 				const token = crypto.randomBytes(16).toString("hex")
+
+				// TODO: Make sure that the new token doesn't already exist.
+				activeSessions[token] = {
+					// TODO: Store client IP?
+					username: req.body.username
+				}
+
+				console.log("User", req.body.username, "logged in with token", token)
 
 				res.cookie("sessionToken", token, {
 					sameSite: "strict",
@@ -213,6 +229,7 @@ app.ws("/dashboard", (client, req) => {
 	client.on("message", (msg) => {
 		try
 		{
+			console.log(msg)
 			cmd = JSON.parse(msg)
 
 			// TODO: Validate endpoint ID with validateEndpoint
