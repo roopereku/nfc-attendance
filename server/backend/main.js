@@ -56,7 +56,7 @@ function validateEndpointIdFormat(id, res)
 	return true
 }
 
-function validateEndpoint(req, res)
+function validateEndpoint(req, res, callback)
 {
 	// Make sure that the endpoint sent an ID.
 	if("endpointId" in req.body)
@@ -64,24 +64,36 @@ function validateEndpoint(req, res)
 		// Ensure that the given ID is valid.
 		if(validateEndpointIdFormat(req.body.endpointId, res))
 		{
-			// TODO: Ask the database if the given endpoint exists.
-			// If no, respond with "401 Unauthorized".
+			getEndpoint(req.body.endpointId, (result) => {
+				console.log("Got endpoint result", result)
 
-			// TODO: Ask the database if the endpoint is blocked.
-			// If yes, respond with "401 Unauthorized".
+				// If no rows were returned, there is no such endpoint.
+				if(result.length === 0)
+				{
+					res.status(401)
+					res.send("Invalid endpoint ID")
+				}
 
-			return true
+				else
+				{
+					// Is the endpoint blocked by an admin.
+					if(result.status === "blocked")
+					{
+						res.status(401)
+						res.send("Endpoint is blocked")
+					}
+				}
+
+				callback(result)
+			})
 		}
-
-		res.status(400)
-		res.send("Invalid ID format")
-
-		return false
 	}
 
-	res.status(400)
-	res.send("Missing ID")
-	return false
+	else
+	{
+		res.status(400)
+		res.send("Missing ID")
+	}
 }
 
 function validateLogin(req, res)
@@ -130,6 +142,16 @@ function displayAllWaitingEndpoints()
 {
 	iterateWebsocketClients("dashboard", (client) => {
 	})
+}
+
+function getEndpoint(id, callback)
+{
+	const result = db.query(
+		"SELECT status from endpoints where id = $1",
+		[ id ], (err, result) => {
+			callback(result.rows)
+		}
+	)
 }
 
 const app = express()
@@ -301,8 +323,7 @@ app.post("/endpoint/register", (req, res) => {
 	if("endpointId" in req.body)
 	{
 		// If an ID exists, make sure that endpoint is valid.
-		if(validateEndpoint(req, res))
-		{
+		validateEndpoint(req, res, (result) => {
 			// TODO: Ask the database if the endpoint is already authorized.
 			// If yes, respond with "200 OK" and send a list of available courses.
 
@@ -313,40 +334,45 @@ app.post("/endpoint/register", (req, res) => {
 			res.send(JSON.stringify({
 				endpointId: req.body.endpointId
 			}))
-		}
-
-		return
+		})
 	}
 
-	// TODO: Add the new endpoint into the database.
-	const id = crypto.randomBytes(16).toString("hex")
+	// The endpoint didn't supply an ID. Generate a new one and send it.
+	else
+	{
+		const id = crypto.randomBytes(16).toString("hex")
 
-	// Respond with "201 Created" to indicate that the
-	// endpoint is still waiting for authorization.
-	res.status(201)
-	res.send(JSON.stringify({
-		endpointId: id
-	}))
+		// Add the newly created endpoint ID to the database as a waiting endpoint.
+		db.query(
+			"INSERT INTO endpoints(id, status) VALUES($1, $2)",
+			[ id, "waiting" ]
+		)
 
-	// Display the newly created endpoint on every active dashboard.
-	displayNewEndpoint(id)
+		// Respond with "201 Created" to indicate that the
+		// endpoint is still waiting for authorization.
+		res.status(201)
+		res.send(JSON.stringify({
+			endpointId: id
+		}))
+
+		// Display the newly created endpoint on every active dashboard.
+		displayNewEndpoint(id)
+	}
 })
 
 app.post("/endpoint/join/", (req, res) => {
-	if(validateEndpoint(req, res))
-	{
-	}
+	validateEndpoint(req, res, (result) => {
+	})
 })
 
 app.post("/endpoint/setUserState/", (req, res) => {
-	if(validateEndpoint(req, res))
-	{
+	validateEndpoint(req, res, (result) => {
 		console.log(req.body)
 		res.status(200)
 		res.send(JSON.stringify({
 			userName: "Test user"
 		}))
-	}
+	})
 })
 
 db.connect((err) => {
@@ -356,6 +382,12 @@ db.connect((err) => {
 	}
 
 	console.log("Connected to postgres")
+
+	// Ensure that "endpoints" table exists.
+	db.query(`CREATE TABLE IF NOT EXISTS endpoints (
+		id VARCHAR(50) PRIMARY KEY,
+		status VARCHAR(50) NOT NULL
+	);`)
 });
 
 app.listen(3000, () => {
