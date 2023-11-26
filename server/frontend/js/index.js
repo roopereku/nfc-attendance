@@ -41,10 +41,24 @@ function addCoursesToList()
 	}
 }
 
-fetch("/courses")
+fetch("/getAvailableCourses")
 	.then((data) => data.json())
 	.then((data) =>
 {
+	console.log(data)
+
+	if(Object.keys(data).length === 0)
+	{
+		const start = document.getElementById("start-button")
+		start.innerHTML = "No available courses"
+		start.disabled = true
+
+		const courseSelector = document.getElementById("courseSelector")
+		courseSelector.disabled = true
+
+		return
+	}
+
 	courses = data
 	const first = Object.keys(courses)[0]
 

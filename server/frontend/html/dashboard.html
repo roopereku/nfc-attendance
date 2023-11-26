@@ -5,8 +5,59 @@
 		<script src="js/bootstrap.bundle.min.js"></script>
 	</head>
 
-	<body class="bg-dark">
-		<div id="endpointList" class="d-flex flex-wrap justify-content-center">
+	<body class="bg-dark text-light">
+		<div class="container-fluid text-center bg-dark bg-gradient">
+			<h1>Dashboard</h1>
+
+			<div class="col d-flex flex-wrap justify-content-center">
+				<ul class="list-group list-group-horizontal btn-group">
+					<li class="btn btn-primary list-group-item" onclick="switchToCourses()">
+						Courses	
+					</li>
+
+					<li class="btn btn-primary list-group-item" onclick="switchToEndpoints()">
+						Endpoints
+					</li>
+
+					<li class="btn btn-primary list-group-item" onclick="switchToMainMenu()">
+						Main menu
+					</li>
+				</ul>
+			</div>
+		</div>
+
+		<div id="courseView" class="dashboardView my-3" hidden>
+			<button class="btn btn-primary mx-2 my-2" onclick="displayCourseConfig(true)">New course</button>
+
+			<ul id="courseList" class="list-group">
+			</ul>
+
+			<div class="modal text-dark" tabindex="-1" id="courseConfig">
+				<div class="modal-dialog">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h5 class="modal-title" id="courseTitle"></h5>
+							<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+						</div>
+						<div class="modal-body">
+							<input type="text" class="form-control needs-validation" id="courseName" placeholder="Course name" required>
+							<input type="text" class="form-control needs-validation" id="courseId" placeholder="Course ID" required>
+							<div class="invalid-feedback" id="courseIdError">
+								Please select a valid state.
+							</div>
+						</div>
+						<div class="modal-footer">
+							<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+							<button type="submit" class="btn btn-primary" id="submitCourseButton" onclick="submitCourse()">Add course</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div id="endpointView" class="dashboardView my-3" hidden>
+			<div id="endpointList" class="d-flex flex-wrap">
+			</div>
 		</div>
 
 		<script src="/js/dashboard.js"></script>

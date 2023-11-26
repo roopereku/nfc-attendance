@@ -167,7 +167,7 @@ app.use(express.static("/backend/node_modules/bootstrap/dist/"))
 
 app.use(cookieParser()); 
 app.use(bodyParser.json())
-app.use(function(err, req, res, next) {
+app.use((err, req, res, next) => {
 	console.log("Got error", err)
 	res.status(500)
 });
@@ -176,6 +176,23 @@ app.get("/", (req, res) => {
 	if(validateLogin(req, res))
 	{
 		res.sendFile("/frontend/html/index.html")
+	}
+})
+
+app.get("/getAvailableCourses", (req, res) => {
+	if(hasValidSessionToken(req))
+	{
+		db.query(
+			//"SELECT * FROM courses WHERE owner = $1",
+			"SELECT * FROM courses",
+			//[ activeSessions[req.cookies.sessionToken].username ],
+			(err, result) => {
+				console.log(err, result.rows)
+
+				res.status(200)
+				res.send(JSON.stringify(result.rows))
+			}
+		)
 	}
 })
 
@@ -306,6 +323,47 @@ app.ws("/dashboard", (client, req) => {
 
 				displayProcessedEndpoint(cmd.endpointId)
 			}
+
+			else if(cmd.status == "submitCourse")
+			{
+				// If the submitted course is a new course, try to add it.
+				if(cmd.isNewCourse)
+				{
+					db.query(
+						"INSERT INTO courses (id, name, owner) VALUES ($1, $2, $3)",
+						[cmd.courseId, cmd.courseName, activeSessions[req.cookies.sessionToken].username],
+						(err, result) => {
+							// TODO: Make sure that the error indicates duplicate key.
+							// Right now this error is assumed.
+							if(err)
+							{
+								// Send a response indicating that courseId was invalid.
+								client.send(JSON.stringify({
+									status: "submitCourseFailed",
+									fieldResponse: {
+										courseId: "Course " + cmd.courseId + " already exists."
+									}
+								}))
+							}
+
+							else
+							{
+								// Send a response indicating that the course was added.
+								iterateWebsocketClients("dashboard", (client) => {
+									client.send(JSON.stringify({
+										status: "newCourseAdded",
+										courseId: cmd.courseId
+									}))
+								})
+							}
+						}
+					)
+				}
+
+				else
+				{
+				}
+			}
 		}
 
 		catch(err)
@@ -332,10 +390,6 @@ app.ws("/view/:courseId", (client, req) => {
 	}
 
 	client.tag = "view"
-})
-
-app.get("/courses", (req, res) => {
-	res.send(JSON.stringify(courses))
 })
 
 app.post("/endpoint/register", (req, res) => {
@@ -430,9 +484,19 @@ db.connect((err) => {
 
 	console.log("Connected to postgres")
 
-	// Ensure that "endpoints" table exists.
+	// Ensure the "endpoints" table exists.
 	db.query(`CREATE TABLE IF NOT EXISTS endpoints (
 		id VARCHAR(50) PRIMARY KEY,
-		status VARCHAR(50) NOT NULL
+		status VARCHAR(50) NOT NULL,
+		availableCourses TEXT []
 	);`)
+
+	// Ensure the "courses" table exists.
+	db.query(`CREATE TABLE IF NOT EXISTS courses (
+		id VARCHAR(50) PRIMARY KEY,
+		name VARCHAR(50) NOT NULL,
+		owner VARCHAR(50) NOT NULL,
+		members TEXT []
+	);`)
+
 })
