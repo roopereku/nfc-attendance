@@ -183,9 +183,8 @@ app.get("/getAvailableCourses", (req, res) => {
 	if(hasValidSessionToken(req))
 	{
 		db.query(
-			//"SELECT * FROM courses WHERE owner = $1",
-			"SELECT * FROM courses",
-			//[ activeSessions[req.cookies.sessionToken].username ],
+			"SELECT * FROM courses WHERE owner = $1",
+			[ activeSessions[req.cookies.sessionToken].username ],
 			(err, result) => {
 				console.log(err, result.rows)
 
@@ -280,7 +279,7 @@ app.ws("/dashboard", (client, req) => {
 
 	client.tag = "dashboard"
 
-	const result = db.query(
+	db.query(
 		"SELECT * FROM endpoints WHERE status = $1",
 		[ "waiting" ], (err, result) => {
 			let ids = []
@@ -292,6 +291,25 @@ app.ws("/dashboard", (client, req) => {
 			client.send(JSON.stringify({
 				status: "waitingEndpointSync",
 				endpoints: ids
+			}))
+		}
+	)
+
+	db.query(
+		"SELECT * FROM courses WHERE owner = $1",
+		[ activeSessions[req.cookies.sessionToken].username ], (err, result) => {
+			let courses = []
+
+			result.rows.forEach((row) => {
+				courses.push({
+					courseId: row.id,
+					courseName: row.name
+				})
+			})
+
+			client.send(JSON.stringify({
+				status: "courseSync",
+				courses: courses
 			}))
 		}
 	)
@@ -349,12 +367,12 @@ app.ws("/dashboard", (client, req) => {
 							else
 							{
 								// Send a response indicating that the course was added.
-								iterateWebsocketClients("dashboard", (client) => {
-									client.send(JSON.stringify({
-										status: "newCourseAdded",
-										courseId: cmd.courseId
-									}))
-								})
+								// TODO: Send this update to anyone who has access to this course.
+								client.send(JSON.stringify({
+									status: "newCourseAdded",
+									courseId: cmd.courseId,
+									courseName: cmd.courseName,
+								}))
 							}
 						}
 					)

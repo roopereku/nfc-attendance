@@ -103,9 +103,15 @@ function onWebsocketMessage(msg)
 		})
 	}
 
+	else if(msg.status === "courseSync") {
+		msg.courses.forEach((course) => {
+			addCourse(course.courseId, course.courseName)
+		})
+	}
+
 	else if(msg.status === "newCourseAdded")
 	{
-		addCourse(msg.courseId)
+		addCourse(msg.courseId, msg.courseName)
 	}
 
 	else if(msg.status === "submitCourseFailed")
@@ -128,20 +134,27 @@ function onWebsocketMessage(msg)
 	}
 }
 
-function addCourse(courseId)
+function addCourse(courseId, courseName)
 {
 	const courseList = document.getElementById("courseList")
 
 	const element = document.createElement("li")
-	element.className = "list-group-item"
-	element.innerHTML = courseId
+	element.className = "list-group-item btn btn-secondary"
+	element.innerHTML = courseName + " (" + courseId + ")"
+
+	element.dataset.courseId = courseId
+	element.dataset.courseName = courseName
+
+	element.addEventListener("click", (e) => {
+		displayCourseConfig(false, e.target.dataset)
+	})
 
 	courseList.appendChild(element)
 }
 
-function displayCourseConfig(isNewCourse)
+function displayCourseConfig(isNewCourse, courseData = undefined)
 {
-	// TODO: Hide members, endpoints if a new course is being configured.
+	console.log(courseData)
 
 	const title = document.getElementById("courseTitle")
 	const submit = document.getElementById("submitCourseButton")
@@ -158,6 +171,12 @@ function displayCourseConfig(isNewCourse)
 	{
 		title.innerHTML = "Edit course"
 		submit.innerHTML = "Edit"
+
+		const courseId = document.getElementById("courseId")
+		const courseName = document.getElementById("courseName")
+
+		courseId.value = courseData.courseId
+		courseName.value = courseData.courseName
 	}
 
 	const modal = new bootstrap.Modal(document.getElementById("courseConfig"), {})
