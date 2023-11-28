@@ -14,8 +14,8 @@ mkdir -p certbot/conf
 mkdir -p postgres
 mkdir -p nginx
 
-# Instantiate the Nginx configuration with the given domain name.
-sed template/nginx.conf -e "s/__CONFIG_DOMAIN__/$DOMAIN_NAME/g" > nginx/nginx.conf
+# Instantiate the Nginx pre-ssl configuration with the given domain name.
+sed template/nginx_pre_ssl.conf -e "s/__CONFIG_DOMAIN__/$DOMAIN_NAME/g" > nginx/nginx.conf
 
 # Startup Nginx for certbot challenge.
 docker compose up -d nginx
@@ -30,3 +30,6 @@ docker compose down nginx
 # Not doing so might lead to a delay in the database that Node doesn't like.
 docker compose up -d postgres
 docker compose down postgres 
+
+# Instantiate the Nginx configuration with the given domain name.
+sed template/nginx.conf -e "s/__CONFIG_DOMAIN__/$DOMAIN_NAME/g" > nginx/nginx.conf
