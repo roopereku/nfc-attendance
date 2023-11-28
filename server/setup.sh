@@ -17,6 +17,9 @@ mkdir -p nginx
 # Instantiate the Nginx pre-ssl configuration with the given domain name.
 sed template/nginx_pre_ssl.conf -e "s/__CONFIG_DOMAIN__/$DOMAIN_NAME/g" > nginx/nginx.conf
 
+# TODO: Make sure that the user is in docker group.
+# TODO: Use dockers own install script if docker doesn't exist.
+
 # Startup Nginx for certbot challenge.
 docker compose up -d nginx
 
