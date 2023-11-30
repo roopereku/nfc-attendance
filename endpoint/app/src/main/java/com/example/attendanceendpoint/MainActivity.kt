@@ -308,7 +308,11 @@ fun ConfigureCourse(courses: JSONObject) {
         ids.add(key)
     }
 
-    // TODO: Check if ids is empty.
+    if(ids.isEmpty()) {
+        Text("No courses available")
+        return
+    }
+
     var selected = ids[0]
 
     Column {
