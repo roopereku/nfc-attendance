@@ -1,4 +1,5 @@
 const websocketPath = "/dashboard/"
+const courseConfigModal = new bootstrap.Modal(document.getElementById("courseConfig"), {})
 
 function displayView(id)
 {
@@ -105,13 +106,26 @@ function onWebsocketMessage(msg)
 
 	else if(msg.status === "courseSync") {
 		msg.courses.forEach((course) => {
-			addCourse(course.courseId, course.courseName)
+			addCourse(course.courseId, course.courseName, course.courseMembers)
 		})
 	}
 
-	else if(msg.status === "newCourseAdded")
+	else if(msg.status === "submitCourse")
 	{
-		addCourse(msg.courseId, msg.courseName)
+		if(msg.isNewCourse)
+		{
+			addCourse(msg.courseId, msg.courseName, msg.courseMembers)
+		}
+
+		else
+		{
+			editCourse(msg.courseId, msg.courseName, msg.courseMembers)
+		}
+	}
+
+	else if(msg.status === "endCourseConfig")
+	{
+		courseConfigModal.hide()
 	}
 
 	else if(msg.status === "submitCourseFailed")
@@ -134,22 +148,57 @@ function onWebsocketMessage(msg)
 	}
 }
 
-function addCourse(courseId, courseName)
+function editCourse(courseId, newName, newMembers)
+{
+	const course = document.getElementById("courseEntry-" + courseId)
+	course.innerHTML = newName + " (" + courseId + ")"
+
+	course.dataset.courseData = JSON.stringify({
+		courseId: courseId,
+		courseName: newName,
+		courseMembers: newMembers
+	})
+}
+
+function addCourse(courseId, courseName, courseMembers)
 {
 	const courseList = document.getElementById("courseList")
 
 	const element = document.createElement("li")
+	element.id = "courseEntry-" + courseId
 	element.className = "list-group-item btn btn-secondary"
-	element.innerHTML = courseName + " (" + courseId + ")"
-
-	element.dataset.courseId = courseId
-	element.dataset.courseName = courseName
-
-	element.addEventListener("click", (e) => {
-		displayCourseConfig(false, e.target.dataset)
-	})
 
 	courseList.appendChild(element)
+	editCourse(courseId, courseName, courseMembers)
+	
+	element.addEventListener("click", (e) => {
+		displayCourseConfig(false, e.target.dataset.courseData)
+	})
+}
+
+function addAuthorizedEndpoint(endpointId)
+{
+	const endpointsList = document.getElementById("permittedEndpointsList")
+}
+
+function addMember(memberId, memberName)
+{
+	const membersList = document.getElementById("permittedMembersList")
+
+	let item = document.createElement("li")
+
+	let checkbox = document.createElement("input")
+	checkbox.className = "from-check-input mx-1"
+	checkbox.type = "checkbox"
+
+	let name = document.createTextNode(memberName)
+	item.className = "list-group-item memberEntry"
+
+	item.appendChild(checkbox)
+	item.appendChild(name)
+
+	item.dataset.memberId = memberId
+	membersList.appendChild(item)
 }
 
 function displayCourseConfig(isNewCourse, courseData = undefined)
@@ -158,6 +207,7 @@ function displayCourseConfig(isNewCourse, courseData = undefined)
 
 	const title = document.getElementById("courseTitle")
 	const submit = document.getElementById("submitCourseButton")
+	const courseId = document.getElementById("courseId")
 
 	submit.dataset.newCourse = isNewCourse
 
@@ -165,6 +215,8 @@ function displayCourseConfig(isNewCourse, courseData = undefined)
 	{
 		title.innerHTML = "Add a new course"
 		submit.innerHTML = "Add course"
+
+		courseId.disabled = false
 	}
 
 	else
@@ -172,15 +224,22 @@ function displayCourseConfig(isNewCourse, courseData = undefined)
 		title.innerHTML = "Edit course"
 		submit.innerHTML = "Edit"
 
-		const courseId = document.getElementById("courseId")
 		const courseName = document.getElementById("courseName")
+		const data = JSON.parse(courseData)
 
-		courseId.value = courseData.courseId
-		courseName.value = courseData.courseName
+		courseId.value = data.courseId
+		courseName.value = data.courseName
+
+		courseId.disabled = true
+
+		membersInList = document.getElementsByClassName("memberEntry")
+		for (const [key, value] of Object.entries(membersInList))
+		{
+			value.children[0].checked = data.courseMembers.includes(value.dataset.memberId)
+		}
 	}
 
-	const modal = new bootstrap.Modal(document.getElementById("courseConfig"), {})
-	modal.show()
+	courseConfigModal.show()
 }
 
 function submitCourse()
@@ -215,14 +274,30 @@ function submitCourse()
 	const name = document.getElementById("courseName")
 	const id = document.getElementById("courseId")
 
+	members = []
+	membersInList = document.getElementsByClassName("memberEntry")
+
+	for (const [key, value] of Object.entries(membersInList))
+	{
+		if(value.children[0].checked)
+		{
+			members.push(value.dataset.memberId)
+		}
+	}
+
+	console.log(submit.dataset.newCourse)
+
 	ws.send(JSON.stringify({
 		status: "submitCourse",
 		isNewCourse: submit.dataset.newCourse,
 		courseName: name.value,
 		courseId: id.value,
+		courseMembers: members
 	}))
 }
 
-//switchToEndpoints()
 switchToCourses()
 addWaitingEndpoint("TESTID")
+
+addMember("MEMBERID1", "Member name 1")
+addMember("MEMBERID2", "Member name 2")

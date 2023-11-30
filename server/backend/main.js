@@ -10,16 +10,6 @@ const fs = require("fs")
 // database as it isn't persistent across multiple backend runs.
 let activeSessions = {}
 
-let courses = {
-	"ABCD1" : {
-		name: "Test course 1"
-	},
-
-	"ABCD2" : {
-		name: "Test course 2"
-	}
-}
-
 function setUserState(courseId, userId, state)
 {
 	console.log("Set state", state, "for", userId, "in", courseId)
@@ -303,7 +293,8 @@ app.ws("/dashboard", (client, req) => {
 			result.rows.forEach((row) => {
 				courses.push({
 					courseId: row.id,
-					courseName: row.name
+					courseName: row.name,
+					courseMembers: row.members
 				})
 			})
 
@@ -319,77 +310,111 @@ app.ws("/dashboard", (client, req) => {
 		{
 			console.log(msg)
 			cmd = JSON.parse(msg)
-
-			// TODO: Validate endpoint ID with validateEndpoint
-
-			if(cmd.status == "authorizeEndpoint")
-			{
-				db.query(
-					"UPDATE endpoints SET status = $1 WHERE id = $2",
-					[ "authorized", cmd.endpointId ]
-				)
-
-				displayProcessedEndpoint(cmd.endpointId)
-			}
-
-			else if(cmd.status == "blockEndpoint")
-			{
-				db.query(
-					"UPDATE endpoints SET status = $1 WHERE id = $2",
-					[ "blocked", cmd.endpointId ]
-				)
-
-				displayProcessedEndpoint(cmd.endpointId)
-			}
-
-			else if(cmd.status == "submitCourse")
-			{
-				// If the submitted course is a new course, try to add it.
-				if(cmd.isNewCourse)
-				{
-					db.query(
-						"INSERT INTO courses (id, name, owner) VALUES ($1, $2, $3)",
-						[cmd.courseId, cmd.courseName, activeSessions[req.cookies.sessionToken].username],
-						(err, result) => {
-							// TODO: Make sure that the error indicates duplicate key.
-							// Right now this error is assumed.
-							if(err)
-							{
-								// Send a response indicating that courseId was invalid.
-								client.send(JSON.stringify({
-									status: "submitCourseFailed",
-									fieldResponse: {
-										courseId: "Course " + cmd.courseId + " already exists."
-									}
-								}))
-							}
-
-							else
-							{
-								// Send a response indicating that the course was added.
-								// TODO: Send this update to anyone who has access to this course.
-								client.send(JSON.stringify({
-									status: "newCourseAdded",
-									courseId: cmd.courseId,
-									courseName: cmd.courseName,
-								}))
-							}
-						}
-					)
-				}
-
-				else
-				{
-				}
-			}
 		}
 
 		catch(err)
 		{
 			console.log("Error while parsing JSON sent by a dashboard user:", err)
 		}
+
+		// TODO: Validate endpoint ID with validateEndpoint
+
+		if(cmd.status == "authorizeEndpoint")
+		{
+			db.query(
+				"UPDATE endpoints SET status = $1 WHERE id = $2",
+				[ "authorized", cmd.endpointId ]
+			)
+
+			displayProcessedEndpoint(cmd.endpointId)
+		}
+
+		else if(cmd.status == "blockEndpoint")
+		{
+			db.query(
+				"UPDATE endpoints SET status = $1 WHERE id = $2",
+				[ "blocked", cmd.endpointId ]
+			)
+
+			displayProcessedEndpoint(cmd.endpointId)
+		}
+
+		else if(cmd.status == "submitCourse")
+		{
+			// Ensure that "members" is an array.
+			if(!Array.isArray(cmd.courseMembers))
+			{
+				// Send a response indicating that courseMembers is invalid.
+				client.send(JSON.stringify({
+					status: "submitCourseFailed",
+					fieldResponse: {
+						courseMembers: "Course members is invalid"
+					}
+				}))
+
+				// Members has to be an array.
+				return
+			}
+
+			// If the submitted course is a new course, try to add it.
+			if(cmd.isNewCourse === "true")
+			{
+				db.query(
+					"INSERT INTO courses (id, name, owner, members) VALUES ($1, $2, $3, $4)",
+					[cmd.courseId, cmd.courseName, activeSessions[req.cookies.sessionToken].username, cmd.courseMembers],
+					(err, result) => {
+						onCourseSubmit(client, cmd, true, err, result)
+					}
+				)
+			}
+
+			else if(cmd.isNewCourse === "false")
+			{
+				db.query(
+					"UPDATE courses set members = $1, name = $2 WHERE id = $3 AND owner = $4",
+					[cmd.courseMembers, cmd.courseName, cmd.courseId, activeSessions[req.cookies.sessionToken].username],
+					(err, result) => {
+						onCourseSubmit(client, cmd, false, err, result)
+					}
+				)
+			}
+		}
 	})
 })
+
+function onCourseSubmit(client, cmd, isNew, err, result)
+{
+	// TODO: Make sure that the error indicates duplicate key.
+	// Right now this error is assumed.
+	if(err)
+	{
+		console.log("Got error", err)
+
+		// Send a response indicating that courseId was invalid.
+		client.send(JSON.stringify({
+			status: "submitCourseFailed",
+			fieldResponse: {
+				courseId: "Course " + cmd.courseId + " already exists."
+			}
+		}))
+	}
+
+	else
+	{
+		// Send a response indicating that the course config should be ended.
+		client.send(JSON.stringify({
+			status: "endCourseConfig",
+		}))
+
+		client.send(JSON.stringify({
+			status: "submitCourse",
+			courseId: cmd.courseId,
+			courseName: cmd.courseName,
+			courseMembers: cmd.courseMembers,
+			isNewCourse: isNew
+		}))
+	}
+}
 
 app.get("/view/:courseId", (req, res) => {
 	if(validateLogin(req, res))
