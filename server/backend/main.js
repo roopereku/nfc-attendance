@@ -120,12 +120,13 @@ function displayNewEndpoint(id)
 	})
 }
 
-function displayProcessedEndpoint(id)
+function displayProcessedEndpoint(id, endpointStatus)
 {
 	iterateWebsocketClients("dashboard", (client) => {
 		client.send(JSON.stringify({
 			status: "processedEndpoint",
-			endpointId: id
+			endpointId: id,
+			endpointStatus: endpointStatus
 		}))
 	})
 }
@@ -272,15 +273,17 @@ app.ws("/dashboard", (client, req) => {
 	db.query(
 		"SELECT * FROM endpoints WHERE status = $1",
 		[ "waiting" ], (err, result) => {
-			let ids = []
+			let endpoints = {}
 
 			result.rows.forEach((row) => {
-				ids.push(row.id)
+				endpoints[row.id] = {
+					status: row.status
+				}
 			})
 
 			client.send(JSON.stringify({
-				status: "waitingEndpointSync",
-				endpoints: ids
+				status: "endpointSync",
+				endpoints: endpoints
 			}))
 		}
 	)
@@ -289,12 +292,13 @@ app.ws("/dashboard", (client, req) => {
 		"SELECT * FROM courses WHERE owner = $1",
 		[ activeSessions[req.cookies.sessionToken].username ], (err, result) => {
 			let courses = []
-
 			result.rows.forEach((row) => {
+				console.log(row)
 				courses.push({
 					courseId: row.id,
 					courseName: row.name,
-					courseMembers: row.members
+					courseMembers: row.members,
+					courseEndpoints: row.endpoints
 				})
 			})
 
@@ -326,7 +330,7 @@ app.ws("/dashboard", (client, req) => {
 				[ "authorized", cmd.endpointId ]
 			)
 
-			displayProcessedEndpoint(cmd.endpointId)
+			displayProcessedEndpoint(cmd.endpointId, "authorized")
 		}
 
 		else if(cmd.status == "blockEndpoint")
@@ -336,23 +340,33 @@ app.ws("/dashboard", (client, req) => {
 				[ "blocked", cmd.endpointId ]
 			)
 
-			displayProcessedEndpoint(cmd.endpointId)
+			displayProcessedEndpoint(cmd.endpointId, "blocked")
 		}
 
 		else if(cmd.status == "submitCourse")
 		{
+			fieldResponse = {}
+
 			// Ensure that "members" is an array.
 			if(!Array.isArray(cmd.courseMembers))
 			{
-				// Send a response indicating that courseMembers is invalid.
+				fieldResponse.courseMembers = "Course members is invalid"
+			}
+
+			// Ensure that "endpoints" is an array.
+			if(!Array.isArray(cmd.courseEndpoints))
+			{
+				fieldResponse.courseMembers = "Course endpoints is invalid"
+			}
+
+			// Send a response indicating that courseMembers is invalid.
+			if(Object.keys(fieldResponse).length !== 0)
+			{
 				client.send(JSON.stringify({
 					status: "submitCourseFailed",
-					fieldResponse: {
-						courseMembers: "Course members is invalid"
-					}
+					fieldResponse: fieldResponse
 				}))
 
-				// Members has to be an array.
 				return
 			}
 
@@ -360,8 +374,9 @@ app.ws("/dashboard", (client, req) => {
 			if(cmd.isNewCourse === "true")
 			{
 				db.query(
-					"INSERT INTO courses (id, name, owner, members) VALUES ($1, $2, $3, $4)",
-					[cmd.courseId, cmd.courseName, activeSessions[req.cookies.sessionToken].username, cmd.courseMembers],
+					"INSERT INTO courses (id, name, owner, members, endpoints) VALUES ($1, $2, $3, $4, $5)",
+					[cmd.courseId, cmd.courseName, activeSessions[req.cookies.sessionToken].username,
+						cmd.courseMembers, cmd.courseEndpoints],
 					(err, result) => {
 						onCourseSubmit(client, cmd, true, err, result)
 					}
@@ -371,8 +386,8 @@ app.ws("/dashboard", (client, req) => {
 			else if(cmd.isNewCourse === "false")
 			{
 				db.query(
-					"UPDATE courses set members = $1, name = $2 WHERE id = $3 AND owner = $4",
-					[cmd.courseMembers, cmd.courseName, cmd.courseId, activeSessions[req.cookies.sessionToken].username],
+					"UPDATE courses set members = $1, endpoints = $2, name = $3 WHERE id = $4 AND owner = $5",
+					[cmd.courseMembers, cmd.courseEndpoints, cmd.courseName, cmd.courseId, activeSessions[req.cookies.sessionToken].username],
 					(err, result) => {
 						onCourseSubmit(client, cmd, false, err, result)
 					}
@@ -411,6 +426,7 @@ function onCourseSubmit(client, cmd, isNew, err, result)
 			courseId: cmd.courseId,
 			courseName: cmd.courseName,
 			courseMembers: cmd.courseMembers,
+			courseEndpoints: cmd.courseEndpoints,
 			isNewCourse: isNew
 		}))
 	}
@@ -530,8 +546,7 @@ db.connect((err) => {
 	// Ensure the "endpoints" table exists.
 	db.query(`CREATE TABLE IF NOT EXISTS endpoints (
 		id VARCHAR(50) PRIMARY KEY,
-		status VARCHAR(50) NOT NULL,
-		availableCourses TEXT []
+		status VARCHAR(50) NOT NULL
 	);`)
 
 	// Ensure the "courses" table exists.
@@ -539,7 +554,7 @@ db.connect((err) => {
 		id VARCHAR(50) PRIMARY KEY,
 		name VARCHAR(50) NOT NULL,
 		owner VARCHAR(50) NOT NULL,
-		members TEXT []
+		members TEXT [],
+		endpoints TEXT []
 	);`)
-
 })

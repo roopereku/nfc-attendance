@@ -95,18 +95,32 @@ function onWebsocketMessage(msg)
 	else if(msg.status === "processedEndpoint")
 	{
 		removeWaitingEndpoint(msg.endpointId)
+
+		if(value.status === "authorized")
+		{
+			addAuthorizedEndpoint(key)
+		}
 	}
 
-	else if(msg.status === "waitingEndpointSync")
+	else if(msg.status === "endpointSync")
 	{
-		msg.endpoints.forEach((id) => {
-			addWaitingEndpoint(id)
-		})
+		for (const [key, value] of Object.entries(msg.endpoints))
+		{
+			if(value.status === "waiting")
+			{
+				addWaitingEndpoint(key)
+			}
+
+			else if(value.status === "authorized")
+			{
+				addAuthorizedEndpoint(key)
+			}
+		}
 	}
 
 	else if(msg.status === "courseSync") {
 		msg.courses.forEach((course) => {
-			addCourse(course.courseId, course.courseName, course.courseMembers)
+			addCourse(course.courseId, course.courseName, course.courseMembers, course.courseEndpoints)
 		})
 	}
 
@@ -114,12 +128,12 @@ function onWebsocketMessage(msg)
 	{
 		if(msg.isNewCourse)
 		{
-			addCourse(msg.courseId, msg.courseName, msg.courseMembers)
+			addCourse(msg.courseId, msg.courseName, msg.courseMembers, msg.courseEndpoints)
 		}
 
 		else
 		{
-			editCourse(msg.courseId, msg.courseName, msg.courseMembers)
+			editCourse(msg.courseId, msg.courseName, msg.courseMembers, msg.courseEndpoints)
 		}
 	}
 
@@ -148,7 +162,7 @@ function onWebsocketMessage(msg)
 	}
 }
 
-function editCourse(courseId, newName, newMembers)
+function editCourse(courseId, newName, newMembers, newEndpoints)
 {
 	const course = document.getElementById("courseEntry-" + courseId)
 	course.innerHTML = newName + " (" + courseId + ")"
@@ -156,11 +170,12 @@ function editCourse(courseId, newName, newMembers)
 	course.dataset.courseData = JSON.stringify({
 		courseId: courseId,
 		courseName: newName,
-		courseMembers: newMembers
+		courseMembers: newMembers,
+		courseEndpoints: newEndpoints
 	})
 }
 
-function addCourse(courseId, courseName, courseMembers)
+function addCourse(courseId, courseName, courseMembers, courseEndpoints)
 {
 	const courseList = document.getElementById("courseList")
 
@@ -169,7 +184,7 @@ function addCourse(courseId, courseName, courseMembers)
 	element.className = "list-group-item btn btn-secondary"
 
 	courseList.appendChild(element)
-	editCourse(courseId, courseName, courseMembers)
+	editCourse(courseId, courseName, courseMembers, courseEndpoints)
 	
 	element.addEventListener("click", (e) => {
 		displayCourseConfig(false, e.target.dataset.courseData)
@@ -178,20 +193,34 @@ function addCourse(courseId, courseName, courseMembers)
 
 function addAuthorizedEndpoint(endpointId)
 {
-	const endpointsList = document.getElementById("permittedEndpointsList")
+	const endpointsList = document.getElementById("endpointsList")
+	const item = document.createElement("li")
+
+	const checkbox = document.createElement("input")
+	checkbox.className = "from-check-input mx-1"
+	checkbox.type = "checkbox"
+
+	const name = document.createTextNode(endpointId)
+	item.className = "list-group-item endpointEntry"
+
+	item.appendChild(checkbox)
+	item.appendChild(name)
+
+	item.dataset.endpointId = endpointId
+	endpointsList.appendChild(item)
+
 }
 
 function addMember(memberId, memberName)
 {
-	const membersList = document.getElementById("permittedMembersList")
+	const membersList = document.getElementById("courseMembersList")
+	const item = document.createElement("li")
 
-	let item = document.createElement("li")
-
-	let checkbox = document.createElement("input")
+	const checkbox = document.createElement("input")
 	checkbox.className = "from-check-input mx-1"
 	checkbox.type = "checkbox"
 
-	let name = document.createTextNode(memberName)
+	const name = document.createTextNode(memberName)
 	item.className = "list-group-item memberEntry"
 
 	item.appendChild(checkbox)
@@ -201,13 +230,23 @@ function addMember(memberId, memberName)
 	membersList.appendChild(item)
 }
 
+function setCheckboxState(entryClassName, callback)
+{
+	const entries = document.getElementsByClassName(entryClassName)
+	for (const [key, value] of Object.entries(entries))
+	{
+		value.children[0].checked = callback(value.dataset)
+	}
+}
+
 function displayCourseConfig(isNewCourse, courseData = undefined)
 {
-	console.log(courseData)
+	console.log("Course data", courseData)
 
 	const title = document.getElementById("courseTitle")
 	const submit = document.getElementById("submitCourseButton")
 	const courseId = document.getElementById("courseId")
+	const courseName = document.getElementById("courseName")
 
 	submit.dataset.newCourse = isNewCourse
 
@@ -217,6 +256,9 @@ function displayCourseConfig(isNewCourse, courseData = undefined)
 		submit.innerHTML = "Add course"
 
 		courseId.disabled = false
+
+		courseId.value = ""
+		courseName.value = ""
 	}
 
 	else
@@ -224,7 +266,6 @@ function displayCourseConfig(isNewCourse, courseData = undefined)
 		title.innerHTML = "Edit course"
 		submit.innerHTML = "Edit"
 
-		const courseName = document.getElementById("courseName")
 		const data = JSON.parse(courseData)
 
 		courseId.value = data.courseId
@@ -232,11 +273,8 @@ function displayCourseConfig(isNewCourse, courseData = undefined)
 
 		courseId.disabled = true
 
-		membersInList = document.getElementsByClassName("memberEntry")
-		for (const [key, value] of Object.entries(membersInList))
-		{
-			value.children[0].checked = data.courseMembers.includes(value.dataset.memberId)
-		}
+		setCheckboxState("memberEntry", (value) => data.courseMembers.includes(value.memberId))
+		setCheckboxState("endpointEntry", (value) => data.courseEndpoints.includes(value.endpointId))
 	}
 
 	courseConfigModal.show()
@@ -285,14 +323,24 @@ function submitCourse()
 		}
 	}
 
-	console.log(submit.dataset.newCourse)
+	endpoints = []
+	endpointsInList = document.getElementsByClassName("endpointEntry")
+
+	for (const [key, value] of Object.entries(endpointsInList))
+	{
+		if(value.children[0].checked)
+		{
+			endpoints.push(value.dataset.endpointId)
+		}
+	}
 
 	ws.send(JSON.stringify({
 		status: "submitCourse",
 		isNewCourse: submit.dataset.newCourse,
 		courseName: name.value,
 		courseId: id.value,
-		courseMembers: members
+		courseMembers: members,
+		courseEndpoints: endpoints
 	}))
 }
 
@@ -301,3 +349,5 @@ addWaitingEndpoint("TESTID")
 
 addMember("MEMBERID1", "Member name 1")
 addMember("MEMBERID2", "Member name 2")
+
+addAuthorizedEndpoint("ENDPOINTID1")
