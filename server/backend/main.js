@@ -271,8 +271,7 @@ app.ws("/dashboard", (client, req) => {
 	client.tag = "dashboard"
 
 	db.query(
-		"SELECT * FROM endpoints WHERE status = $1",
-		[ "waiting" ], (err, result) => {
+		"SELECT * FROM endpoints", (err, result) => {
 			let endpoints = {}
 
 			result.rows.forEach((row) => {
@@ -466,11 +465,24 @@ app.post("/endpoint/register", (req, res) => {
 			{
 				console.log("Endpoint is authorized")
 
-				res.status(200)
-				res.send(JSON.stringify({
-					// TODO: Get this information from the database.
-					availableCourses: courses
-				}))
+				db.query(
+					"SELECT * FROM courses WHERE $1 = ANY(endpoints)",
+					[ req.body.endpointId ],
+					(err, result) => {
+						courses = {}
+
+						result.rows.forEach((row) => {
+							courses[row.id] = {
+								courseName: row.name
+							}
+						})
+
+						res.status(200)
+						res.send(JSON.stringify({
+							availableCourses: courses
+						}))
+					}
+				)
 			}
 
 			else if(endpointStatus === "waiting")

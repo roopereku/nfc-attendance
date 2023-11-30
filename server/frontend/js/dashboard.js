@@ -259,6 +259,9 @@ function displayCourseConfig(isNewCourse, courseData = undefined)
 
 		courseId.value = ""
 		courseName.value = ""
+
+		setCheckboxState("memberEntry", (value) => false)
+		setCheckboxState("endpointEntry", (value) => false)
 	}
 
 	else
