@@ -157,11 +157,11 @@ class MainActivity : ComponentActivity() {
             val json = """
             {
                 "endpointId" : "${prefs.getString("EndpointID", "")}",
-                "tag": "$st"
+                "memberTag": "$st"
             }
             """.trimIndent()
 
-            sendPostRequest("$address/endpoint/setUserState", json) { http, result ->
+            sendPostRequest("$address/endpoint/memberPresent", json) { http, result ->
                 if(http.responseCode == 200) {
                     val json = JSONObject(result)
 
@@ -348,7 +348,22 @@ fun ConfigureCourse(courses: JSONObject) {
             """.trimIndent()
 
             sendPostRequest("$address/endpoint/join", json) { http, result ->
-                println("Joining course returned ${http.responseCode}")
+                when(http.responseCode) {
+                    // If the endpoint successfully joins a course, start accepting NFC tags.
+                    200 -> {
+                        (context as MainActivity).startAcceptingTags()
+                    }
+
+                    403 -> {
+                        // TODO: Tell user that this endpoint isn't authorized for course.
+                        println("Not authorized to course")
+                    }
+
+                    401 -> {
+                        // TODO: Tell user that this endpoint isn't authorized.
+                        println("Not authorized when joining a course")
+                    }
+                }
             }
         }) {
             Text("Join course")
