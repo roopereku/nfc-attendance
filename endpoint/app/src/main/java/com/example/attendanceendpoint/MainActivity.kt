@@ -302,23 +302,28 @@ fun ConfigureConnection() {
 @Composable
 fun ConfigureCourse(courses: JSONObject) {
     val context = LocalContext.current
-    var ids = mutableListOf<String>()
+    var courseNames = mutableListOf<String>()
 
     for(key in courses.keys()) {
-        ids.add(key)
+        val courseData = JSONObject(courses[key].toString())
+        courseNames.add("${courseData.getString("courseName")} ($key)")
     }
 
-    if(ids.isEmpty()) {
+    if(courseNames.isEmpty()) {
         Text("No courses available")
         return
     }
 
-    var selected = ids[0]
+    var selectedId: String? = null
 
     Column {
-        ShowDropDownMenu(ids) {
-            println("Selected is now $it")
-            selected = it
+        ShowDropDownMenu(courseNames, "Select a course") { item, index ->
+            courses.keys().withIndex().forEach {
+                if(it.index == index)
+                {
+                    selectedId = it.value
+                }
+            }
         }
 
         Button(onClick = {
@@ -330,14 +335,20 @@ fun ConfigureCourse(courses: JSONObject) {
                 return@Button
             }
 
+            if (selectedId == null) {
+                Log.e("STATUS", "No course selected")
+                return@Button
+            }
+
             val json = """
             {
                 "endpointId" : "${prefs.getString("EndpointID", "")}",
-                "courseId": "$selected"
+                "courseId": "$selectedId"
             }
             """.trimIndent()
 
             sendPostRequest("$address/endpoint/join", json) { http, result ->
+                println("Joining course returned ${http.responseCode}")
             }
         }) {
             Text("Join course")
@@ -347,10 +358,10 @@ fun ConfigureCourse(courses: JSONObject) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShowDropDownMenu(strings: List<String>, onSelected: (String) -> Unit) {
+fun ShowDropDownMenu(strings: List<String>, initial: String, onSelected: (String, Int) -> Unit) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
-    var selectedText by remember { mutableStateOf(strings[0]) }
+    var selectedText by remember { mutableStateOf(initial) }
 
     Box(
         modifier = Modifier
@@ -375,13 +386,13 @@ fun ShowDropDownMenu(strings: List<String>, onSelected: (String) -> Unit) {
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
-                strings.forEach { item ->
+                strings.forEachIndexed() { index, item ->
                     DropdownMenuItem(
                         text = { Text(text = item) },
                         onClick = {
                             selectedText = item
                             expanded = false
-                            onSelected(item)
+                            onSelected(item, index)
                             Toast.makeText(context, item, Toast.LENGTH_SHORT).show()
                         }
                     )
