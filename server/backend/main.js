@@ -567,36 +567,57 @@ app.post("/endpoint/join/", (req, res) => {
 })
 
 app.post("/endpoint/memberPresent", (req, res) => {
+
+	// Make sure that the endpoint is authorized.
 	validateEndpointAuthorized(req, res, (result) => {
-
-		// Check which course the endpoint has currently joined to.
+		// Make sure that the given tag is associated with a user.
 		db.query(
-			"SELECT currentcourse FROM endpoints WHERE id = $1",
-			[ req.body.endpointId ], (err, result) => {
+			"SELECT name FROM members WHERE tag = $1",
+			[ req.body.memberTag ],
+			(err, result) => {
 
-				// Make sure that the endpoint is still authorized for the course.
+				// If there are no returned rows, no such tag exists.
+				if(result.rows.length === 0)
+				{
+					console.log("Tag", req.body.memberTag, "is not associated with a member")
+
+					// Send "404 Not Found" to indicate that the tag is not registered.
+					res.status(404)
+					res.send("Tag not registered")
+
+					return
+				}
+
+				// Check which course the endpoint has currently joined to.
 				db.query(
-					"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
-					[ result.rows[0].currentcourse, req.body.endpointId ],
-					(err, result) => {
+					"SELECT currentcourse FROM endpoints WHERE id = $1",
+					[ req.body.endpointId ], (err, result) => {
 
-						// If nothing was returned, the endpoint is unauthorized for this course.
-						if(result.rows.length === 0)
-						{
-							res.status(403)
-							res.send("Unauthorized to access course")
-						}
+						// Make sure that the endpoint is still authorized for the course.
+						db.query(
+							"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
+							[ result.rows[0].currentcourse, req.body.endpointId ],
+							(err, result) => {
 
-						else
-						{
-							console.log("Received status update from", req.body.endpointId, req.body.memberTag)
+								// If nothing was returned, the endpoint is unauthorized for this course.
+								if(result.rows.length === 0)
+								{
+									res.status(403)
+									res.send("Unauthorized to access course")
+								}
 
-							// TODO: Send name of member associated with the tag.
-							res.status(200)
-							res.send(JSON.stringify({
-								userName: "Test user"
-							}))
-						}
+								else
+								{
+									console.log("Received status update from", req.body.endpointId, req.body.memberTag)
+
+									// TODO: Send name of member associated with the tag.
+									res.status(200)
+									res.send(JSON.stringify({
+										userName: "Test user"
+									}))
+								}
+							}
+						)
 					}
 				)
 			}
@@ -631,4 +652,12 @@ db.connect((err) => {
 		members TEXT [],
 		endpoints TEXT []
 	);`)
+
+	// Ensure the "members" table exists.
+	db.query(`CREATE TABLE IF NOT EXISTS members (
+		id VARCHAR(50) PRIMARY KEY,
+		name VARCHAR(50) NOT NULL,
+		tag VARCHAR(50) NOT NULL
+	);`)
+
 })
