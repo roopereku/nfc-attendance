@@ -352,5 +352,3 @@ addWaitingEndpoint("TESTID")
 
 addMember("MEMBERID1", "Member name 1")
 addMember("MEMBERID2", "Member name 2")
-
-addAuthorizedEndpoint("ENDPOINTID1")
