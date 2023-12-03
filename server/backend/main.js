@@ -151,6 +151,33 @@ function iterateCourseViewers(courseId, callback)
 	})
 }
 
+function displayCourseMembers(courseId, callback)
+{
+	// Find all members that are part of the requested course.
+	db.query(
+		"SELECT members FROM courses WHERE id = $1",
+		[ courseId ], (err, result) => {
+
+			// Is there anything to show?
+			if(result.rows.length !== 0)
+			{
+				// Find the names and ids of the course members.
+				db.query(
+					"SELECT name, id FROM members WHERE id = ANY($1)",
+					[ result.rows[0].members ], (err, result) => {
+						const json = JSON.stringify({
+							status: "memberSync",
+							members: result.rows
+						})
+
+						callback(json)
+					}
+				)
+			}
+		}
+	)
+}
+
 function displayMembers(callback)
 {
 	db.query(
@@ -439,6 +466,12 @@ app.ws("/dashboard", (client, req) => {
 						onCourseSubmit(client, cmd, false, err, result)
 					}
 				)
+
+				displayCourseMembers(cmd.courseId, (json) => {
+					iterateCourseViewers(cmd.courseId, (client) => {
+						client.send(json)
+					})
+				})
 			}
 		}
 	})
@@ -501,29 +534,9 @@ app.ws("/view/:courseId", (client, req) => {
 	client.tag = "view"
 	client.viewedCourse = req.params.courseId
 
-	// Find all members that are part of the requested course.
-	db.query(
-		"SELECT members FROM courses WHERE id = $1",
-		[ client.viewedCourse ], (err, result) => {
-			if(result.rows.length === 0)
-			{
-				// TODO: Close the connection on an invalid query?
-				return
-			}
-
-			// Find the names of the course members.
-			db.query(
-				"SELECT name, id FROM members WHERE id = ANY($1)",
-				[ result.rows[0].members ], (err, result) => {
-					// Notify the new viewer about the course members.
-					client.send(JSON.stringify({
-						status: "memberSync",
-						members: result.rows
-					}))
-				}
-			)
-		}
-	)
+	displayCourseMembers(client.viewedCourse, (json) => {
+		client.send(json)
+	})
 })
 
 app.post("/endpoint/register", (req, res) => {
