@@ -151,25 +151,20 @@ function iterateCourseViewers(courseId, callback)
 	})
 }
 
-function displayNewEndpoint(id)
+function displayEndpoints()
 {
-	iterateWebsocketClients("dashboard", (client) => {
-		client.send(JSON.stringify({
-			status: "newEndpoint",
-			endpointId: id
-		}))
-	})
-}
-
-function displayProcessedEndpoint(id, endpointStatus)
-{
-	iterateWebsocketClients("dashboard", (client) => {
-		client.send(JSON.stringify({
-			status: "processedEndpoint",
-			endpointId: id,
-			endpointStatus: endpointStatus
-		}))
-	})
+	db.query(
+		"SELECT id, status FROM endpoints",
+		(err, result) => {
+			console.log("endpoints", result.rows)
+			iterateWebsocketClients("dashboard", (client) => {
+				client.send(JSON.stringify({
+					status: "endpointSync",
+					endpoints: result.rows
+				}))
+			})
+		}
+	)
 }
 
 function getEndpoint(id, callback)
@@ -326,22 +321,7 @@ app.ws("/dashboard", (client, req) => {
 		}
 	)
 
-	db.query(
-		"SELECT * FROM endpoints", (err, result) => {
-			let endpoints = {}
-
-			result.rows.forEach((row) => {
-				endpoints[row.id] = {
-					status: row.status
-				}
-			})
-
-			client.send(JSON.stringify({
-				status: "endpointSync",
-				endpoints: endpoints
-			}))
-		}
-	)
+	displayEndpoints()
 
 	db.query(
 		"SELECT * FROM courses WHERE owner = $1",
@@ -382,7 +362,7 @@ app.ws("/dashboard", (client, req) => {
 				[ "authorized", cmd.endpointId ]
 			)
 
-			displayProcessedEndpoint(cmd.endpointId, "authorized")
+			displayEndpoints()
 		}
 
 		else if(cmd.status == "blockEndpoint")
@@ -392,7 +372,7 @@ app.ws("/dashboard", (client, req) => {
 				[ "blocked", cmd.endpointId ]
 			)
 
-			displayProcessedEndpoint(cmd.endpointId, "blocked")
+			displayEndpoints()
 		}
 
 		else if(cmd.status == "submitCourse")
@@ -593,7 +573,7 @@ app.post("/endpoint/register", (req, res) => {
 		}))
 
 		// Display the newly created endpoint on every active dashboard.
-		displayNewEndpoint(id)
+		displayEndpoints()
 	}
 })
 

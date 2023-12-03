@@ -72,50 +72,24 @@ function addWaitingEndpoint(id)
 	endpointList.appendChild(entry)
 }
 
-function removeWaitingEndpoint(id)
-{
-	const endpoints = document.getElementsByClassName("waitingEndpoint")
-
-	for (const [key, value] of Object.entries(endpoints))
-	{
-		if(value.dataset.endpointId === id)
-		{
-			value.remove()
-		}
-	}
-}
-
 function onWebsocketMessage(msg)
 {
-	if(msg.status === "newEndpoint")
+	if(msg.status === "endpointSync")
 	{
-		addWaitingEndpoint(msg.endpointId)
-	}
+		document.getElementById("endpointsList").replaceChildren()
+		document.querySelectorAll('.waitingEndpoint').forEach(e => e.remove());
 
-	else if(msg.status === "processedEndpoint")
-	{
-		removeWaitingEndpoint(msg.endpointId)
-
-		if(msg.endpointStatus === "authorized")
-		{
-			addAuthorizedEndpoint(msg.endpointId)
-		}
-	}
-
-	else if(msg.status === "endpointSync")
-	{
-		for (const [key, value] of Object.entries(msg.endpoints))
-		{
-			if(value.status === "waiting")
+		msg.endpoints.forEach((endpoint) => {
+			if(endpoint.status === "waiting")
 			{
-				addWaitingEndpoint(key)
+				addWaitingEndpoint(endpoint.id)
 			}
 
-			else if(value.status === "authorized")
+			else if(endpoint.status === "authorized")
 			{
-				addAuthorizedEndpoint(key)
+				addAuthorizedEndpoint(endpoint.id)
 			}
-		}
+		})
 	}
 
 	else if(msg.status === "memberSync")
