@@ -162,25 +162,39 @@ class MainActivity : ComponentActivity() {
             """.trimIndent()
 
             sendPostRequest("$address/endpoint/memberPresent", json) { http, result ->
-                if(http.responseCode == 200) {
-                    val json = JSONObject(result)
+                when(http.responseCode) {
+                    200 -> {
+                        val json = JSONObject(result)
 
-                    setContent {
-                        stateChanged("Hello ${json.getString("userName")}")
+                        setContent {
+                            stateChanged("Hello ${json.getString("userName")}")
 
-                        Handler().postDelayed(
-                        {
-                            setContent {
-                                StandbyMode()
+                            Handler().postDelayed(
+                                {
+                                    setContent {
+                                        StandbyMode()
+                                    }
+                                }, 2000
+                            )
+                        }
+                    }
+
+                    404 -> {
+                        // Temporarily disable tag handling while registration is happening.
+                        readyForTags = false
+
+                        setContent {
+                            HandleRegistration() { memberName, memberId ->
+                                println("Register $memberName $memberId $st")
+
+                                sendPostRequest("$address/endpoint/registerMember", json) { http, result ->
+                                    println("Register member returned ${http.responseCode}")
+                                }
                             }
-                        }, 2000)
+                        }
                     }
                 }
             }
-
-            //setContent {
-            //    TagDetected(st)
-            //}
         }
     }
 
@@ -223,6 +237,56 @@ class MainActivity : ComponentActivity() {
     }
 
     private var readyForTags = false
+}
+
+@Composable
+fun HandleRegistration(callback: (String, String) -> Unit) {
+    val context = LocalContext.current
+
+    Column {
+        Text("Tag is not recognized. Do you want to register it?")
+
+        Button(onClick = {
+            (context as MainActivity).setContent {
+                ShowRegistration(callback)
+            }
+        }) {
+            Text("Yes")
+        }
+
+        Button(onClick = {
+            (context as MainActivity).startAcceptingTags()
+        }) {
+            Text("No")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ShowRegistration(callback: (String, String) -> Unit) {
+    var memberName by remember { mutableStateOf("") }
+    var memberId by remember { mutableStateOf("") }
+
+    Column {
+        OutlinedTextField(
+            value = memberName,
+            onValueChange = { memberName = it },
+            label = { Text("Your name") }
+        )
+
+        OutlinedTextField(
+            value = memberId,
+            onValueChange = { memberId = it },
+            label = { Text("Your student ID") }
+        )
+
+        Button(onClick = {
+            callback(memberName, memberId)
+        }) {
+            Text("Register")
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
