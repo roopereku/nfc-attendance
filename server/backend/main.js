@@ -574,10 +574,10 @@ app.post("/endpoint/memberPresent", (req, res) => {
 		db.query(
 			"SELECT name FROM members WHERE tag = $1",
 			[ req.body.memberTag ],
-			(err, result) => {
+			(err, memberResult) => {
 
 				// If there are no returned rows, no such tag exists.
-				if(result.rows.length === 0)
+				if(memberResult.rows.length === 0)
 				{
 					console.log("Tag", req.body.memberTag, "is not associated with a member")
 
@@ -608,12 +608,11 @@ app.post("/endpoint/memberPresent", (req, res) => {
 
 								else
 								{
-									console.log("Received status update from", req.body.endpointId, req.body.memberTag)
+									console.log("Received status update from", req.body.endpointId, req.body.memberTag, memberResult.rows[0].name)
 
-									// TODO: Send name of member associated with the tag.
 									res.status(200)
 									res.send(JSON.stringify({
-										userName: "Test user"
+										userName: memberResult.rows[0].name
 									}))
 								}
 							}
@@ -626,6 +625,25 @@ app.post("/endpoint/memberPresent", (req, res) => {
 })
 
 app.post("/endpoint/registerMember", (req, res) => {
+	validateEndpointAuthorized(req, res, (result) => {
+		db.query(
+			"INSERT INTO members(id, name, tag) VALUES ($1, $2, $3)",
+			[ req.body.memberId, req.body.memberName, req.body.memberTag ],
+			(err, result) => {
+				if(err)
+				{
+					res.status(403)
+					res.send("This tag has already been registered")
+				}
+
+				else
+				{
+					res.status(200)
+					res.send("Registered member")
+				}
+			}
+		)
+	})
 })
 
 app.listen(3000, () => {
@@ -658,8 +676,8 @@ db.connect((err) => {
 
 	// Ensure the "members" table exists.
 	db.query(`CREATE TABLE IF NOT EXISTS members (
-		id VARCHAR(50) PRIMARY KEY,
-		name VARCHAR(50) NOT NULL,
-		tag VARCHAR(50) NOT NULL UNIQUE
+		tag VARCHAR(50) PRIMARY KEY,
+		id VARCHAR(50) NOT NULL,
+		name VARCHAR(50) NOT NULL
 	);`)
 })
