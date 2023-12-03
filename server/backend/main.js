@@ -704,7 +704,21 @@ app.post("/endpoint/registerMember", (req, res) => {
 				if(err)
 				{
 					res.status(403)
-					res.send("This tag has already been registered")
+
+					if(err.detail.startsWith("Key (id)"))
+					{
+						res.send("This ID has already been registered")
+					}
+
+					else if(err.detail.startsWith("Key (tag)"))
+					{
+						res.send("This tag has already been registered")
+					}
+
+					else
+					{
+						res.send("Unknown error")
+					}
 				}
 
 				else
@@ -755,8 +769,8 @@ db.connect((err) => {
 
 	// Ensure the "members" table exists.
 	db.query(`CREATE TABLE IF NOT EXISTS members (
-		tag VARCHAR(50) PRIMARY KEY,
-		id VARCHAR(50) NOT NULL,
-		name VARCHAR(50) NOT NULL
+		id VARCHAR(50) PRIMARY KEY,
+		name VARCHAR(50) NOT NULL,
+		tag VARCHAR(50) UNIQUE
 	);`)
 })
