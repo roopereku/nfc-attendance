@@ -625,6 +625,9 @@ app.post("/endpoint/memberPresent", (req, res) => {
 	})
 })
 
+app.post("/endpoint/registerMember", (req, res) => {
+})
+
 app.listen(3000, () => {
 	console.log("Express is up")
 });
@@ -657,7 +660,6 @@ db.connect((err) => {
 	db.query(`CREATE TABLE IF NOT EXISTS members (
 		id VARCHAR(50) PRIMARY KEY,
 		name VARCHAR(50) NOT NULL,
-		tag VARCHAR(50) NOT NULL
+		tag VARCHAR(50) NOT NULL UNIQUE
 	);`)
-
 })

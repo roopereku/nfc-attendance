@@ -96,9 +96,9 @@ function onWebsocketMessage(msg)
 	{
 		removeWaitingEndpoint(msg.endpointId)
 
-		if(value.status === "authorized")
+		if(msg.endpointStatus === "authorized")
 		{
-			addAuthorizedEndpoint(key)
+			addAuthorizedEndpoint(msg.endpointId)
 		}
 	}
 
@@ -348,7 +348,3 @@ function submitCourse()
 }
 
 switchToCourses()
-addWaitingEndpoint("TESTID")
-
-addMember("MEMBERID1", "Member name 1")
-addMember("MEMBERID2", "Member name 2")
