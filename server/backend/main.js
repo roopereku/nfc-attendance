@@ -151,18 +151,32 @@ function iterateCourseViewers(courseId, callback)
 	})
 }
 
-function displayEndpoints()
+function displayMembers(callback)
+{
+	db.query(
+		"SELECT name, id FROM members",
+		(err, result) => {
+			const json = JSON.stringify({
+				status: "memberSync",
+				members: result.rows
+			})
+
+			callback(json)
+		}
+	)
+}
+
+function displayEndpoints(callback)
 {
 	db.query(
 		"SELECT id, status FROM endpoints",
 		(err, result) => {
-			console.log("endpoints", result.rows)
-			iterateWebsocketClients("dashboard", (client) => {
-				client.send(JSON.stringify({
-					status: "endpointSync",
-					endpoints: result.rows
-				}))
+			const json = JSON.stringify({
+				status: "endpointSync",
+				endpoints: result.rows
 			})
+
+			callback(json)
 		}
 	)
 }
@@ -304,24 +318,17 @@ app.ws("/dashboard", (client, req) => {
 
 	client.tag = "dashboard"
 
-	db.query(
-		"SELECT * FROM members", (err, result) => {
-			let members = []
-			result.rows.forEach((row) => {
-				members.push({
-					memberId: row.id,
-					memberName: row.name,
-				})
-			})
+	displayMembers((json) => {
+		iterateWebsocketClients("dashboard", (client) => {
+			client.send(json)
+		})
+	})
 
-			client.send(JSON.stringify({
-				status: "memberSync",
-				members: members
-			}))
-		}
-	)
-
-	displayEndpoints()
+	displayEndpoints((json) => {
+		iterateWebsocketClients("dashboard", (client) => {
+			client.send(json)
+		})
+	})
 
 	db.query(
 		"SELECT * FROM courses WHERE owner = $1",
@@ -359,20 +366,28 @@ app.ws("/dashboard", (client, req) => {
 		{
 			db.query(
 				"UPDATE endpoints SET status = $1 WHERE id = $2",
-				[ "authorized", cmd.endpointId ]
+				[ "authorized", cmd.endpointId ], (err, result) => {
+					displayEndpoints((json) => {
+						iterateWebsocketClients("dashboard", (client) => {
+							client.send(json)
+						})
+					})
+				}
 			)
-
-			displayEndpoints()
 		}
 
 		else if(cmd.status == "blockEndpoint")
 		{
 			db.query(
 				"UPDATE endpoints SET status = $1 WHERE id = $2",
-				[ "blocked", cmd.endpointId ]
+				[ "blocked", cmd.endpointId ], (err, result) => {
+					displayEndpoints((json) => {
+						iterateWebsocketClients("dashboard", (client) => {
+							client.send(json)
+						})
+					})
+				}
 			)
-
-			displayEndpoints()
 		}
 
 		else if(cmd.status == "submitCourse")
@@ -500,21 +515,10 @@ app.ws("/view/:courseId", (client, req) => {
 			db.query(
 				"SELECT name, id FROM members WHERE id = ANY($1)",
 				[ result.rows[0].members ], (err, result) => {
-					const members = []
-
-					// Put the names and ids into a clean array.
-					for (const [key, value] of Object.entries(result.rows))
-					{
-						members.push({
-							memberId: value.id,
-							memberName: value.name
-						})
-					}
-
 					// Notify the new viewer about the course members.
 					client.send(JSON.stringify({
 						status: "memberSync",
-						members: members
+						members: result.rows
 					}))
 				}
 			)
@@ -573,7 +577,11 @@ app.post("/endpoint/register", (req, res) => {
 		}))
 
 		// Display the newly created endpoint on every active dashboard.
-		displayEndpoints()
+		displayEndpoints((json) => {
+			iterateWebsocketClients("dashboard", (client) => {
+				client.send(json)
+			})
+		})
 	}
 })
 
@@ -706,12 +714,10 @@ app.post("/endpoint/registerMember", (req, res) => {
 					res.status(200)
 					res.send("Registered member")
 
-					iterateWebsocketClients("dashboard", (client) => {
-						client.send(JSON.stringify({
-							status: "newMember",
-							memberId: req.body.memberId,
-							memberName: req.body.memberName
-						}))
+					displayMembers((json) => {
+						iterateWebsocketClients("dashboard", (client) => {
+							client.send(json)
+						})
 					})
 				}
 			}

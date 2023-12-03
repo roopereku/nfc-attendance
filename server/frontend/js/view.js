@@ -9,8 +9,10 @@ function onWebsocketMessage(msg)
 {
 	if(msg.status === "memberSync")
 	{
+		document.getElementById("memberArea").replaceChildren()
+
 		msg.members.forEach((member) => {
-			displayMember(member.memberId, member.memberName)
+			displayMember(member.id, member.name)
 		})
 	}
 }

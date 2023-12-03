@@ -94,14 +94,11 @@ function onWebsocketMessage(msg)
 
 	else if(msg.status === "memberSync")
 	{
-		msg.members.forEach((member) => {
-			addMember(member.memberId, member.memberName)
-		})
-	}
+		document.getElementById("courseMembersList").replaceChildren()
 
-	else if(msg.status === "newMember")
-	{
-		addMember(msg.memberID, msg.memberName)
+		msg.members.forEach((member) => {
+			addMember(member.id, member.name)
+		})
 	}
 
 	else if(msg.status === "courseSync")
