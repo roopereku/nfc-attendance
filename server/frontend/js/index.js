@@ -17,7 +17,7 @@ function updateSelectedCourse(id)
 {
 	// Update the start button text and store the ID.
 	const start = document.getElementById("start-button")
-	start.dataset.selectedId = id
+	start.dataset.selectedId = courses[id].id
 	start.innerHTML = "Start viewing " + courses[id].name
 }
 

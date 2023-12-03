@@ -208,8 +208,6 @@ app.get("/getAvailableCourses", (req, res) => {
 			"SELECT * FROM courses WHERE owner = $1",
 			[ activeSessions[req.cookies.sessionToken].username ],
 			(err, result) => {
-				console.log(err, result.rows)
-
 				res.status(200)
 				res.send(JSON.stringify(result.rows))
 			}
@@ -478,6 +476,7 @@ app.ws("/view/:courseId", (client, req) => {
 	}
 
 	client.tag = "view"
+	client.viewedCourse = req.params.courseId
 })
 
 app.post("/endpoint/register", (req, res) => {
@@ -572,10 +571,9 @@ app.post("/endpoint/memberPresent", (req, res) => {
 	validateEndpointAuthorized(req, res, (result) => {
 		// Make sure that the given tag is associated with a user.
 		db.query(
-			"SELECT name FROM members WHERE tag = $1",
+			"SELECT name, id FROM members WHERE tag = $1",
 			[ req.body.memberTag ],
 			(err, memberResult) => {
-
 				// If there are no returned rows, no such tag exists.
 				if(memberResult.rows.length === 0)
 				{
@@ -591,12 +589,12 @@ app.post("/endpoint/memberPresent", (req, res) => {
 				// Check which course the endpoint has currently joined to.
 				db.query(
 					"SELECT currentcourse FROM endpoints WHERE id = $1",
-					[ req.body.endpointId ], (err, result) => {
+					[ req.body.endpointId ], (err, courseResult) => {
 
 						// Make sure that the endpoint is still authorized for the course.
 						db.query(
 							"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
-							[ result.rows[0].currentcourse, req.body.endpointId ],
+							[ courseResult.rows[0].currentcourse, req.body.endpointId ],
 							(err, result) => {
 
 								// If nothing was returned, the endpoint is unauthorized for this course.
@@ -610,10 +608,23 @@ app.post("/endpoint/memberPresent", (req, res) => {
 								{
 									console.log("Received status update from", req.body.endpointId, req.body.memberTag, memberResult.rows[0].name)
 
+									// Send the name of the received user to the endpoint.
 									res.status(200)
 									res.send(JSON.stringify({
 										userName: memberResult.rows[0].name
 									}))
+
+									// For each client that's viewing this course, tell that the given member is present.
+									iterateWebsocketClients("view", (client) => {
+										if(client.viewedCourse === courseResult.rows[0].currentcourse)
+										{
+											client.send(JSON.stringify({
+												status: "memberPresent",
+												memberId: memberResult.rows[0].id,
+												memberName: memberResult.rows[0].name,
+											}))
+										}
+									})
 								}
 							}
 						)
