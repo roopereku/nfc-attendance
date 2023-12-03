@@ -141,6 +141,16 @@ function iterateWebsocketClients(tag, callback)
     });
 }
 
+function iterateCourseViewers(courseId, callback)
+{
+	iterateWebsocketClients("view", (client) => {
+		if(client.viewedCourse === courseId)
+		{
+			callback(client)
+		}
+	})
+}
+
 function displayNewEndpoint(id)
 {
 	iterateWebsocketClients("dashboard", (client) => {
@@ -300,6 +310,23 @@ app.ws("/dashboard", (client, req) => {
 	client.tag = "dashboard"
 
 	db.query(
+		"SELECT * FROM members", (err, result) => {
+			let members = []
+			result.rows.forEach((row) => {
+				members.push({
+					memberId: row.id,
+					memberName: row.name,
+				})
+			})
+
+			client.send(JSON.stringify({
+				status: "memberSync",
+				members: members
+			}))
+		}
+	)
+
+	db.query(
 		"SELECT * FROM endpoints", (err, result) => {
 			let endpoints = {}
 
@@ -321,7 +348,6 @@ app.ws("/dashboard", (client, req) => {
 		[ activeSessions[req.cookies.sessionToken].username ], (err, result) => {
 			let courses = []
 			result.rows.forEach((row) => {
-				console.log(row)
 				courses.push({
 					courseId: row.id,
 					courseName: row.name,
@@ -475,8 +501,45 @@ app.ws("/view/:courseId", (client, req) => {
 		return
 	}
 
+	// TODO: Make sure that the requester has permissions to this course.
+
 	client.tag = "view"
 	client.viewedCourse = req.params.courseId
+
+	// Find all members that are part of the requested course.
+	db.query(
+		"SELECT members FROM courses WHERE id = $1",
+		[ client.viewedCourse ], (err, result) => {
+			if(result.rows.length === 0)
+			{
+				// TODO: Close the connection on an invalid query?
+				return
+			}
+
+			// Find the names of the course members.
+			db.query(
+				"SELECT name, id FROM members WHERE id = ANY($1)",
+				[ result.rows[0].members ], (err, result) => {
+					const members = []
+
+					// Put the names and ids into a clean array.
+					for (const [key, value] of Object.entries(result.rows))
+					{
+						members.push({
+							memberId: value.id,
+							memberName: value.name
+						})
+					}
+
+					// Notify the new viewer about the course members.
+					client.send(JSON.stringify({
+						status: "memberSync",
+						members: members
+					}))
+				}
+			)
+		}
+	)
 })
 
 app.post("/endpoint/register", (req, res) => {
@@ -615,15 +678,12 @@ app.post("/endpoint/memberPresent", (req, res) => {
 									}))
 
 									// For each client that's viewing this course, tell that the given member is present.
-									iterateWebsocketClients("view", (client) => {
-										if(client.viewedCourse === courseResult.rows[0].currentcourse)
-										{
-											client.send(JSON.stringify({
-												status: "memberPresent",
-												memberId: memberResult.rows[0].id,
-												memberName: memberResult.rows[0].name,
-											}))
-										}
+									iterateCourseViewers(courseResult.rows[0].currentcourse, (client) => {
+										client.send(JSON.stringify({
+											status: "memberPresent",
+											memberId: memberResult.rows[0].id,
+											memberName: memberResult.rows[0].name,
+										}))
 									})
 								}
 							}
@@ -651,6 +711,14 @@ app.post("/endpoint/registerMember", (req, res) => {
 				{
 					res.status(200)
 					res.send("Registered member")
+
+					iterateWebsocketClients("dashboard", (client) => {
+						client.send(JSON.stringify({
+							status: "newMember",
+							memberId: req.body.memberId,
+							memberName: req.body.memberName
+						}))
+					})
 				}
 			}
 		)

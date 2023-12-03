@@ -7,19 +7,22 @@ const websocketPath = "/view/" + getCookieValue("courseId")
 
 function onWebsocketMessage(msg)
 {
+	if(msg.status === "memberSync")
+	{
+		msg.members.forEach((member) => {
+			displayMember(member.memberId, member.memberName)
+		})
+	}
 }
 
-function displayUser(userId, userName)
+function displayMember(memberId, memberName)
 {
 	const element = document.createElement("button")
-	const area = document.getElementById("userArea")
+	const area = document.getElementById("memberArea")
 
 	element.className = "btn btn-secondary mx-1 my-1"
-	element.innerHTML = userName
-	element.dataset.id = userId
+	element.innerHTML = memberName
+	element.dataset.id = memberId
 
 	area.appendChild(element)
 }
-
-for(let i = 0; i < 20; i++)
-	displayUser("testid", "Test user")

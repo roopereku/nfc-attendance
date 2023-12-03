@@ -118,7 +118,20 @@ function onWebsocketMessage(msg)
 		}
 	}
 
-	else if(msg.status === "courseSync") {
+	else if(msg.status === "memberSync")
+	{
+		msg.members.forEach((member) => {
+			addMember(member.memberId, member.memberName)
+		})
+	}
+
+	else if(msg.status === "newMember")
+	{
+		addMember(msg.memberID, msg.memberName)
+	}
+
+	else if(msg.status === "courseSync")
+	{
 		msg.courses.forEach((course) => {
 			addCourse(course.courseId, course.courseName, course.courseMembers, course.courseEndpoints)
 		})
