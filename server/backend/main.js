@@ -17,16 +17,21 @@ function setUserState(courseId, userId, state)
 
 function validateCourse(id, res, callback)
 {
-	if(id in courses)
-	{
-		callback()
-	}
+	db.query(
+		"SELECT id FROM courses WHERE id = $1",
+		[ id ], (err, result) => {
+			if(result.rows.length === 0)
+			{
+				res.status(403)
+				res.send("Invalid course ID")
+			}
 
-	else
-	{
-		res.status(403)
-		res.send("Invalid course")
-	}
+			else
+			{
+				callback(err, result)
+			}
+		}
+	)
 }
 
 function hasValidSessionToken(req)
@@ -47,7 +52,7 @@ function validateEndpointIdFormat(id, res)
 	return true
 }
 
-function validateEndpoint(req, res, callback)
+function validateEndpointAuthorized(req, res, callback)
 {
 	// Make sure that the endpoint sent an ID.
 	if("endpointId" in req.body)
@@ -65,16 +70,42 @@ function validateEndpoint(req, res, callback)
 
 				else
 				{
+					console.log(result.rows)
+					const endpointStatus = result.rows[0].status
+					const endpointId = result.rows[0].id
+
 					// Is the endpoint blocked by an admin.
-					if(result.status === "blocked")
+					if(endpointStatus=== "blocked")
 					{
+						console.log("Endpoint", endpointId, "is blocked")
+
 						res.status(401)
 						res.send("Endpoint is blocked")
 					}
 
+					// If the endpoint supplied an existing ID which isn' yet authorized or
+					// blocked, respond with "201 Created" to indicate that the
+					// endpoint is still waiting for authorization.
+					else if(endpointStatus === "waiting")
+					{
+						console.log("Endpoint", endpointId, "is waiting")
+
+						res.status(201)
+						res.send(JSON.stringify({
+							endpointId: endpointId
+						}))
+					}
+
+					// Call the callback if the endpoint is authorized.
+					else if(endpointStatus === "authorized")
+					{
+						console.log("Endpoint", endpointId, "is authorized")
+						callback(result)
+					}
+
 					else
 					{
-						callback(result)
+						console.log("Weird status for", endpointId, endpointStatus)
 					}
 				}
 			})
@@ -134,7 +165,7 @@ function displayProcessedEndpoint(id, endpointStatus)
 function getEndpoint(id, callback)
 {
 	const result = db.query(
-		"SELECT status from endpoints where id = $1",
+		"SELECT id, status FROM endpoints WHERE id = $1",
 		[ id ], (err, result) => {
 			callback(result)
 		}
@@ -320,8 +351,6 @@ app.ws("/dashboard", (client, req) => {
 			console.log("Error while parsing JSON sent by a dashboard user:", err)
 		}
 
-		// TODO: Validate endpoint ID with validateEndpoint
-
 		if(cmd.status == "authorizeEndpoint")
 		{
 			db.query(
@@ -434,6 +463,7 @@ function onCourseSubmit(client, cmd, isNew, err, result)
 app.get("/view/:courseId", (req, res) => {
 	if(validateLogin(req, res))
 	{
+		// TODO: Validate course.
 		res.cookie("courseId", req.params.courseId, { sameSite: "Strict" })
 		res.sendFile("/frontend/html/view.html")
 	}
@@ -455,48 +485,29 @@ app.post("/endpoint/register", (req, res) => {
 	if("endpointId" in req.body)
 	{
 		// If an ID exists, make sure that endpoint is valid.
-		validateEndpoint(req, res, (result) => {
+		validateEndpointAuthorized(req, res, (result) => {
 			console.log("In register for existing ID ->", result.rows)
 			endpointStatus = result.rows[0].status
 
-			// TODO: Ask the database if the endpoint is already authorized.
-			// If yes, respond with "200 OK" and send a list of available courses.
-			if(endpointStatus === "authorized")
-			{
-				console.log("Endpoint is authorized")
+			db.query(
+				"SELECT * FROM courses WHERE $1 = ANY(endpoints)",
+				[ req.body.endpointId ],
+				(err, result) => {
+					console.log("IN registered", result.rows)
+					courses = {}
 
-				db.query(
-					"SELECT * FROM courses WHERE $1 = ANY(endpoints)",
-					[ req.body.endpointId ],
-					(err, result) => {
-						courses = {}
+					result.rows.forEach((row) => {
+						courses[row.id] = {
+							courseName: row.name
+						}
+					})
 
-						result.rows.forEach((row) => {
-							courses[row.id] = {
-								courseName: row.name
-							}
-						})
-
-						res.status(200)
-						res.send(JSON.stringify({
-							availableCourses: courses
-						}))
-					}
-				)
-			}
-
-			else if(endpointStatus === "waiting")
-			{
-				console.log("Endpoint is waiting")
-
-				// If the endpoint supplied an existing ID which isn' yet authorized or
-				// blocked, respond with "201 Created" to indicate that the
-				// endpoint is still waiting for authorization.
-				res.status(201)
-				res.send(JSON.stringify({
-					endpointId: req.body.endpointId
-				}))
-			}
+					res.status(200)
+					res.send(JSON.stringify({
+						availableCourses: courses
+					}))
+				}
+			)
 		})
 	}
 
@@ -525,21 +536,92 @@ app.post("/endpoint/register", (req, res) => {
 })
 
 app.post("/endpoint/join/", (req, res) => {
-	validateEndpoint(req, res, (result) => {
-		validateCourse(req.body.courseId, res, () => 
-		{
-			console.log("Endpoint", req.body.endpointId, "Joins", req.body.courseId)
+	validateEndpointAuthorized(req, res, (result) => {
+		validateCourse(req.body.courseId, res, () => {
+			db.query(
+				"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
+				[ req.body.courseId, req.body.endpointId ],
+				(err, result) => {
+					if(result.rows.length === 0)
+					{
+						res.status(403)
+						res.send("Unauthorized to access course")
+					}
+
+					else
+					{
+						db.query(
+							"UPDATE endpoints SET currentcourse = $1",
+							[ result.rows[0].id ], (err, result) => {
+								console.log("Endpoint", req.body.endpointId, "Joins", req.body.courseId)
+
+								res.status(200)
+								res.send("Joined course")
+							}
+						)
+					}
+				}
+			)
 		})
 	})
 })
 
-app.post("/endpoint/setUserState/", (req, res) => {
-	validateEndpoint(req, res, (result) => {
-		console.log(req.body)
-		res.status(200)
-		res.send(JSON.stringify({
-			userName: "Test user"
-		}))
+app.post("/endpoint/memberPresent", (req, res) => {
+
+	// Make sure that the endpoint is authorized.
+	validateEndpointAuthorized(req, res, (result) => {
+		// Make sure that the given tag is associated with a user.
+		db.query(
+			"SELECT name FROM members WHERE tag = $1",
+			[ req.body.memberTag ],
+			(err, result) => {
+
+				// If there are no returned rows, no such tag exists.
+				if(result.rows.length === 0)
+				{
+					console.log("Tag", req.body.memberTag, "is not associated with a member")
+
+					// Send "404 Not Found" to indicate that the tag is not registered.
+					res.status(404)
+					res.send("Tag not registered")
+
+					return
+				}
+
+				// Check which course the endpoint has currently joined to.
+				db.query(
+					"SELECT currentcourse FROM endpoints WHERE id = $1",
+					[ req.body.endpointId ], (err, result) => {
+
+						// Make sure that the endpoint is still authorized for the course.
+						db.query(
+							"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
+							[ result.rows[0].currentcourse, req.body.endpointId ],
+							(err, result) => {
+
+								// If nothing was returned, the endpoint is unauthorized for this course.
+								if(result.rows.length === 0)
+								{
+									res.status(403)
+									res.send("Unauthorized to access course")
+								}
+
+								else
+								{
+									console.log("Received status update from", req.body.endpointId, req.body.memberTag)
+
+									// TODO: Send name of member associated with the tag.
+									res.status(200)
+									res.send(JSON.stringify({
+										userName: "Test user"
+									}))
+								}
+							}
+						)
+					}
+				)
+			}
+		)
 	})
 })
 
@@ -558,7 +640,8 @@ db.connect((err) => {
 	// Ensure the "endpoints" table exists.
 	db.query(`CREATE TABLE IF NOT EXISTS endpoints (
 		id VARCHAR(50) PRIMARY KEY,
-		status VARCHAR(50) NOT NULL
+		status VARCHAR(50) NOT NULL,
+		currentcourse VARCHAR(50)
 	);`)
 
 	// Ensure the "courses" table exists.
@@ -569,4 +652,12 @@ db.connect((err) => {
 		members TEXT [],
 		endpoints TEXT []
 	);`)
+
+	// Ensure the "members" table exists.
+	db.query(`CREATE TABLE IF NOT EXISTS members (
+		id VARCHAR(50) PRIMARY KEY,
+		name VARCHAR(50) NOT NULL,
+		tag VARCHAR(50) NOT NULL
+	);`)
+
 })
