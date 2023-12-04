@@ -657,7 +657,7 @@ app.post("/endpoint/memberPresent", (req, res) => {
 
 						// Make sure that the endpoint is still authorized for the course.
 						db.query(
-							"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
+							"SELECT id, name FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
 							[ courseResult.rows[0].currentcourse, req.body.endpointId ],
 							(err, result) => {
 
@@ -670,22 +670,41 @@ app.post("/endpoint/memberPresent", (req, res) => {
 
 								else
 								{
-									console.log("Received status update from", req.body.endpointId, req.body.memberTag, memberResult.rows[0].name)
+									// Make sure that the given user is on the course.
+									db.query(
+										"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(members)",
+										[ courseResult.rows[0].currentcourse, memberResult.rows[0].id ], (err, result) => {
+											if(result.rows.length === 0)
+											{
+												console.log("Member", memberResult.rows[0].name, "is not on course", courseResult.rows[0].name)
+												// Send the name of the received user to the endpoint.
+												res.status(403)
+												res.send(JSON.stringify({
+													name: memberResult.rows[0].name,
+													error: "Member is not on this course"
+												}))
 
-									// Send the name of the received user to the endpoint.
-									res.status(200)
-									res.send(JSON.stringify({
-										userName: memberResult.rows[0].name
-									}))
+												return
+											}
 
-									// For each client that's viewing this course, tell that the given member is present.
-									iterateCourseViewers(courseResult.rows[0].currentcourse, (client) => {
-										client.send(JSON.stringify({
-											status: "memberPresent",
-											memberId: memberResult.rows[0].id,
-											memberName: memberResult.rows[0].name,
-										}))
-									})
+											console.log("Received status update from", req.body.endpointId, req.body.memberTag, memberResult.rows[0].name)
+
+											// Send the name of the received user to the endpoint.
+											res.status(200)
+											res.send(JSON.stringify({
+												userName: memberResult.rows[0].name
+											}))
+
+											// For each client that's viewing this course, tell that the given member is present.
+											iterateCourseViewers(courseResult.rows[0].currentcourse, (client) => {
+												client.send(JSON.stringify({
+													status: "memberPresent",
+													memberId: memberResult.rows[0].id,
+													memberName: memberResult.rows[0].name,
+												}))
+											})
+										}
+									)
 								}
 							}
 						)
