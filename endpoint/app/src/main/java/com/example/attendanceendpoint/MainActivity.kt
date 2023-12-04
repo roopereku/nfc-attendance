@@ -11,25 +11,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme.typography
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,12 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
-import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.FileNotFoundException
-import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -355,65 +345,66 @@ fun ConfigureConnection() {
 
     var text by remember { mutableStateOf(default) }
 
-    Column {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            label = { Text("Label") }
-        )
+    Centered {
+        Column {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Label") }
+            )
 
-        Button(onClick = {
-            val editor = prefs.edit();
-            editor.putString("ServerAddress", text);
-            editor.apply();
+            Button(onClick = {
+                val editor = prefs.edit();
+                editor.putString("ServerAddress", text);
+                editor.apply();
 
-            var json = "{}"
+                var json = "{}"
 
-            // If an ID is already stored, send it to the backend.
-            if(prefs.contains("EndpointID"))
-            {
-                json = """
+                // If an ID is already stored, send it to the backend.
+                if (prefs.contains("EndpointID")) {
+                    json = """
                 {
                     "endpointId" : "${prefs.getString("EndpointID", "")}"
                 }
                 """.trimIndent()
-            }
+                }
 
-            sendPostRequest("$text/endpoint/register", json) { http, result ->
-                println("Got response ${http.responseCode}")
+                sendPostRequest("$text/endpoint/register", json) { http, result ->
+                    println("Got response ${http.responseCode}")
 
-                when(http.responseCode) {
-                    401 -> {
-                        (context as MainActivity).showBlocked()
-                    }
-
-                    // "201 Created" indicates that this endpoint now waits for authorization.
-                    201 -> {
-                        val json = JSONObject(result)
-
-                        editor.putString("EndpointID", json.getString("endpointId"));
-                        editor.apply();
-
-                        // TODO: Visually show waiting state.
-                        println("I am waiting!")
-                    }
-
-                    // "200 OK" indicates that this endpoint is ready to join a course.
-                    200 -> {
-                        val json = JSONObject(result)
-
-                        val activity = context as MainActivity
-                        activity.setContent {
-                            ConfigureCourse(json.getJSONObject("availableCourses"))
+                    when (http.responseCode) {
+                        401 -> {
+                            (context as MainActivity).showBlocked()
                         }
 
-                        //activity.startAcceptingTags()
+                        // "201 Created" indicates that this endpoint now waits for authorization.
+                        201 -> {
+                            val json = JSONObject(result)
+
+                            editor.putString("EndpointID", json.getString("endpointId"));
+                            editor.apply();
+
+                            // TODO: Visually show waiting state.
+                            println("I am waiting!")
+                        }
+
+                        // "200 OK" indicates that this endpoint is ready to join a course.
+                        200 -> {
+                            val json = JSONObject(result)
+
+                            val activity = context as MainActivity
+                            activity.setContent {
+                                ConfigureCourse(json.getJSONObject("availableCourses"))
+                            }
+
+                            //activity.startAcceptingTags()
+                        }
                     }
                 }
-            }
 
-        }) {
-            Text("Connect to the server")
+            }) {
+                Text("Connect to the server")
+            }
         }
     }
 }
@@ -428,64 +419,66 @@ fun ConfigureCourse(courses: JSONObject) {
         courseNames.add("${courseData.getString("courseName")} ($key)")
     }
 
-    if(courseNames.isEmpty()) {
-        Text("No courses available")
-        return
-    }
+    Centered {
 
-    var selectedId: String? = null
-
-    Column {
-        ShowDropDownMenu(courseNames, "Select a course") { item, index ->
-            courses.keys().withIndex().forEach {
-                if(it.index == index)
-                {
-                    selectedId = it.value
-                }
-            }
+        if (courseNames.isEmpty()) {
+            Text("No courses available")
+            return@Centered
         }
 
-        Button(onClick = {
-            val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
-            val address: String = prefs.getString("ServerAddress", "")!!
+        var selectedId: String? = null
 
-            if (address.isEmpty()) {
-                Log.e("STATUS", "Server address is empty")
-                return@Button
+        Column {
+            ShowDropDownMenu(courseNames, "Select a course") { item, index ->
+                courses.keys().withIndex().forEach {
+                    if (it.index == index) {
+                        selectedId = it.value
+                    }
+                }
             }
 
-            if (selectedId == null) {
-                Log.e("STATUS", "No course selected")
-                return@Button
-            }
+            Button(onClick = {
+                val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
+                val address: String = prefs.getString("ServerAddress", "")!!
 
-            val json = """
+                if (address.isEmpty()) {
+                    Log.e("STATUS", "Server address is empty")
+                    return@Button
+                }
+
+                if (selectedId == null) {
+                    Log.e("STATUS", "No course selected")
+                    return@Button
+                }
+
+                val json = """
             {
                 "endpointId" : "${prefs.getString("EndpointID", "")}",
                 "courseId": "$selectedId"
             }
             """.trimIndent()
 
-            sendPostRequest("$address/endpoint/join", json) { http, result ->
-                when(http.responseCode) {
-                    // If the endpoint successfully joins a course, start accepting NFC tags.
-                    200 -> {
-                        (context as MainActivity).startAcceptingTags()
-                    }
+                sendPostRequest("$address/endpoint/join", json) { http, result ->
+                    when (http.responseCode) {
+                        // If the endpoint successfully joins a course, start accepting NFC tags.
+                        200 -> {
+                            (context as MainActivity).startAcceptingTags()
+                        }
 
-                    403 -> {
-                        // TODO: Tell user that this endpoint isn't authorized for course.
-                        println("Not authorized to course")
-                    }
+                        403 -> {
+                            // TODO: Tell user that this endpoint isn't authorized for course.
+                            println("Not authorized to course")
+                        }
 
-                    401 -> {
-                        // TODO: Tell user that this endpoint isn't authorized.
-                        println("Not authorized when joining a course")
+                        401 -> {
+                            // TODO: Tell user that this endpoint isn't authorized.
+                            println("Not authorized when joining a course")
+                        }
                     }
                 }
+            }) {
+                Text("Join course")
             }
-        }) {
-            Text("Join course")
         }
     }
 }
@@ -537,13 +530,10 @@ fun ShowDropDownMenu(strings: List<String>, initial: String, onSelected: (String
 }
 
 @Composable
-fun stateChanged(newState: String) {
-    LargeText(newState)
-}
-
-@Composable
 fun StandbyMode() {
-    LargeText("Scan your NFC tag")
+    Centered {
+        LargeText("Scan your NFC tag")
+    }
 }
 
 @Composable
@@ -558,5 +548,19 @@ fun LargeText(text: String) {
 
 @Composable
 fun InvalidAdapter(reason: String) {
-    LargeText(reason)
+    Centered {
+        LargeText(reason)
+    }
+}
+
+@Composable
+fun Centered(content: @Composable() () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
 }
