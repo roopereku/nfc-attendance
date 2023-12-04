@@ -444,7 +444,7 @@ fun ConfigureCourse(courses: JSONObject) {
                 after = { ConfigureConnection() },
                 3000
             )
-
+            
             return@Centered
         }
 
