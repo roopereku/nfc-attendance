@@ -42,7 +42,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedReader
 import java.io.FileNotFoundException
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -59,13 +61,15 @@ fun sendRequest(serverUrl: String, callback: (client: HttpURLConnection, result:
             var result : String? = ""
 
             try {
-                inputStream.bufferedReader().use {
+                val stream = if(responseCode <= 399) inputStream else errorStream
+
+                stream.bufferedReader().use {
                     it.lines().forEach { line ->
                         result += line
                     }
                 }
             } catch(err: FileNotFoundException) {
-                println(err)
+                println("Error during receiving $err")
             }
 
             callback.invoke(this, result)
@@ -103,6 +107,25 @@ fun sendPostRequest(serverUrl: String, json: String, callback: (client: HttpURLC
 class MainActivity : ComponentActivity() {
     private var nfc : NfcAdapter? = null
 
+    fun showTextFor(text: String, millis: Long) {
+        setContent {
+            Text(text)
+
+            Handler().postDelayed(
+                {
+                    setContent {
+                        StandbyMode()
+                    }
+                }, millis
+            )
+        }
+
+    }
+
+    fun showBlocked() {
+        showTextFor("Endpoint is blocked", 2000)
+    }
+
     private fun onAdapterInvalid() {
         if(nfc == null) {
             Log.e("NFC", "Adapter is null")
@@ -137,8 +160,6 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        Log.i("STATUS", "Got intent")
-
         if (NfcAdapter.ACTION_TAG_DISCOVERED == intent?.action) {
             var st = ""
             val msg = intent.getByteArrayExtra(NfcAdapter.EXTRA_ID)
@@ -165,18 +186,15 @@ class MainActivity : ComponentActivity() {
                 when(http.responseCode) {
                     200 -> {
                         val json = JSONObject(result)
+                        showTextFor("Hello ${json.getString("userName")}", 2000)
+                    }
 
-                        setContent {
-                            stateChanged("Hello ${json.getString("userName")}")
+                    202 -> {
+                        showTextFor("You are not on this course", 2000)
+                    }
 
-                            Handler().postDelayed(
-                                {
-                                    setContent {
-                                        StandbyMode()
-                                    }
-                                }, 2000
-                            )
-                        }
+                    401 -> {
+                        showBlocked()
                     }
 
                     404 -> {
@@ -184,11 +202,45 @@ class MainActivity : ComponentActivity() {
                         readyForTags = false
 
                         setContent {
-                            HandleRegistration() { memberName, memberId ->
+                            HandleRegistration() { memberName, memberId, errorCallback ->
                                 println("Register $memberName $memberId $st")
+                                val json = """
+                                {
+                                    "endpointId" : "${prefs.getString("EndpointID", "")}",
+                                    "memberTag": "$st",
+                                    "memberName": "$memberName",
+                                    "memberId": "$memberId"
+                                }
+                                """
 
                                 sendPostRequest("$address/endpoint/registerMember", json) { http, result ->
-                                    println("Register member returned ${http.responseCode}")
+                                    when(http.responseCode) {
+                                        // "201 Created" indicates that the registration was successful.
+                                        201 -> {
+                                            // TODO: Ask if member should be added to the current course?
+                                            // TODO: Retry the memberPresent request?
+                                            startAcceptingTags()
+                                        }
+
+                                        // "403 Forbidden" indicates that the ID or tag was invalid.
+                                        403 -> {
+                                            val json = JSONObject(result)
+
+                                            when(json.getString("invalidField")) {
+                                                "id" -> {
+                                                    errorCallback("ID is already in use")
+                                                }
+
+                                                "tag" -> {
+                                                    errorCallback("Tag is already in use")
+                                                }
+                                            }
+                                        }
+
+                                        401 -> {
+                                            showBlocked()
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -240,7 +292,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun HandleRegistration(callback: (String, String) -> Unit) {
+fun HandleRegistration(callback: (String, String, (String) -> Unit) -> Unit) {
     val context = LocalContext.current
 
     Column {
@@ -264,9 +316,10 @@ fun HandleRegistration(callback: (String, String) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShowRegistration(callback: (String, String) -> Unit) {
+fun ShowRegistration(callback: (String, String, (String) -> Unit) -> Unit) {
     var memberName by remember { mutableStateOf("") }
     var memberId by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
 
     Column {
         OutlinedTextField(
@@ -282,10 +335,14 @@ fun ShowRegistration(callback: (String, String) -> Unit) {
         )
 
         Button(onClick = {
-            callback(memberName, memberId)
+            callback(memberName, memberId) {
+                error = it
+            }
         }) {
             Text("Register")
         }
+
+        Text(error)
     }
 }
 
@@ -326,10 +383,8 @@ fun ConfigureConnection() {
                 println("Got response ${http.responseCode}")
 
                 when(http.responseCode) {
-                    // "401 Unauthorized" indicates that this endpoint is blocked.
                     401 -> {
-                        // TODO: Visually show blocked state.
-                        println("I am blocked :-(")
+                        (context as MainActivity).showBlocked()
                     }
 
                     // "201 Created" indicates that this endpoint now waits for authorization.
