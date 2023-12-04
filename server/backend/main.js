@@ -10,11 +10,6 @@ const fs = require("fs")
 // database as it isn't persistent across multiple backend runs.
 let activeSessions = {}
 
-function setUserState(courseId, userId, state)
-{
-	console.log("Set state", state, "for", userId, "in", courseId)
-}
-
 function validateCourse(id, res, callback)
 {
 	db.query(
@@ -674,15 +669,14 @@ app.post("/endpoint/memberPresent", (req, res) => {
 									db.query(
 										"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(members)",
 										[ courseResult.rows[0].currentcourse, memberResult.rows[0].id ], (err, result) => {
+
+											// If no rows are returned, the member is not found on the selected course.
 											if(result.rows.length === 0)
 											{
 												console.log("Member", memberResult.rows[0].name, "is not on course", courseResult.rows[0].name)
-												// Send the name of the received user to the endpoint.
-												res.status(403)
-												res.send(JSON.stringify({
-													name: memberResult.rows[0].name,
-													error: "Member is not on this course"
-												}))
+
+												res.status(202)
+												res.send("Member not on course")
 
 												return
 											}
@@ -724,26 +718,34 @@ app.post("/endpoint/registerMember", (req, res) => {
 				if(err)
 				{
 					res.status(403)
-
 					if(err.detail.startsWith("Key (id)"))
 					{
-						res.send("This ID has already been registered")
+						console.log("Invalid id")
+						res.send(JSON.stringify({
+							invalidField: "id"
+						}))
 					}
 
 					else if(err.detail.startsWith("Key (tag)"))
 					{
-						res.send("This tag has already been registered")
+						console.log("Invalid tag")
+						res.send(JSON.stringify({
+							invalidField: "tag"
+						}))
 					}
 
 					else
 					{
-						res.send("Unknown error")
+						// TODO: Set status as 5xx.
+						res.send(JSON.stringify({
+							invalidField: "unknown"
+						}))
 					}
 				}
 
 				else
 				{
-					res.status(200)
+					res.status(201)
 					res.send("Registered member")
 
 					displayMembers((json) => {
