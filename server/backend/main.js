@@ -10,11 +10,6 @@ const fs = require("fs")
 // database as it isn't persistent across multiple backend runs.
 let activeSessions = {}
 
-function setUserState(courseId, userId, state)
-{
-	console.log("Set state", state, "for", userId, "in", courseId)
-}
-
 function validateCourse(id, res, callback)
 {
 	db.query(
@@ -141,25 +136,71 @@ function iterateWebsocketClients(tag, callback)
     });
 }
 
-function displayNewEndpoint(id)
+function iterateCourseViewers(courseId, callback)
 {
-	iterateWebsocketClients("dashboard", (client) => {
-		client.send(JSON.stringify({
-			status: "newEndpoint",
-			endpointId: id
-		}))
+	iterateWebsocketClients("view", (client) => {
+		if(client.viewedCourse === courseId)
+		{
+			callback(client)
+		}
 	})
 }
 
-function displayProcessedEndpoint(id, endpointStatus)
+function displayCourseMembers(courseId, callback)
 {
-	iterateWebsocketClients("dashboard", (client) => {
-		client.send(JSON.stringify({
-			status: "processedEndpoint",
-			endpointId: id,
-			endpointStatus: endpointStatus
-		}))
-	})
+	// Find all members that are part of the requested course.
+	db.query(
+		"SELECT members FROM courses WHERE id = $1",
+		[ courseId ], (err, result) => {
+
+			// Is there anything to show?
+			if(result.rows.length !== 0)
+			{
+				// Find the names and ids of the course members.
+				db.query(
+					"SELECT name, id FROM members WHERE id = ANY($1)",
+					[ result.rows[0].members ], (err, result) => {
+						const json = JSON.stringify({
+							status: "memberSync",
+							members: result.rows
+						})
+
+						callback(json)
+					}
+				)
+			}
+		}
+	)
+}
+
+function displayMembers(callback)
+{
+	db.query(
+		"SELECT name, id FROM members",
+		(err, result) => {
+			const json = JSON.stringify({
+				status: "memberSync",
+				members: result.rows
+			})
+
+			callback(json)
+		}
+	)
+}
+
+function displayEndpoints(callback)
+{
+	db.query(
+		"SELECT id, status FROM endpoints",
+		(err, result) => {
+			const json = JSON.stringify({
+				status: "endpointSync",
+				endpoints: result.rows
+			})
+
+			callback(json)
+		}
+	)
 }
 
 function getEndpoint(id, callback)
@@ -208,8 +249,6 @@ app.get("/getAvailableCourses", (req, res) => {
 			"SELECT * FROM courses WHERE owner = $1",
 			[ activeSessions[req.cookies.sessionToken].username ],
 			(err, result) => {
-				console.log(err, result.rows)
-
 				res.status(200)
 				res.send(JSON.stringify(result.rows))
 			}
@@ -301,29 +340,23 @@ app.ws("/dashboard", (client, req) => {
 
 	client.tag = "dashboard"
 
-	db.query(
-		"SELECT * FROM endpoints", (err, result) => {
-			let endpoints = {}
+	displayMembers((json) => {
+		iterateWebsocketClients("dashboard", (client) => {
+			client.send(json)
+		})
+	})
 
-			result.rows.forEach((row) => {
-				endpoints[row.id] = {
-					status: row.status
-				}
-			})
-
-			client.send(JSON.stringify({
-				status: "endpointSync",
-				endpoints: endpoints
-			}))
-		}
-	)
+	displayEndpoints((json) => {
+		iterateWebsocketClients("dashboard", (client) => {
+			client.send(json)
+		})
+	})
 
 	db.query(
 		"SELECT * FROM courses WHERE owner = $1",
 		[ activeSessions[req.cookies.sessionToken].username ], (err, result) => {
 			let courses = []
 			result.rows.forEach((row) => {
-				console.log(row)
 				courses.push({
 					courseId: row.id,
 					courseName: row.name,
@@ -355,20 +388,28 @@ app.ws("/dashboard", (client, req) => {
 		{
 			db.query(
 				"UPDATE endpoints SET status = $1 WHERE id = $2",
-				[ "authorized", cmd.endpointId ]
+				[ "authorized", cmd.endpointId ], (err, result) => {
+					displayEndpoints((json) => {
+						iterateWebsocketClients("dashboard", (client) => {
+							client.send(json)
+						})
+					})
+				}
 			)
-
-			displayProcessedEndpoint(cmd.endpointId, "authorized")
 		}
 
 		else if(cmd.status == "blockEndpoint")
 		{
 			db.query(
 				"UPDATE endpoints SET status = $1 WHERE id = $2",
-				[ "blocked", cmd.endpointId ]
+				[ "blocked", cmd.endpointId ], (err, result) => {
+					displayEndpoints((json) => {
+						iterateWebsocketClients("dashboard", (client) => {
+							client.send(json)
+						})
+					})
+				}
 			)
-
-			displayProcessedEndpoint(cmd.endpointId, "blocked")
 		}
 
 		else if(cmd.status == "submitCourse")
@@ -420,6 +461,12 @@ app.ws("/dashboard", (client, req) => {
 						onCourseSubmit(client, cmd, false, err, result)
 					}
 				)
+
+				displayCourseMembers(cmd.courseId, (json) => {
+					iterateCourseViewers(cmd.courseId, (client) => {
+						client.send(json)
+					})
+				})
 			}
 		}
 	})
@@ -477,7 +524,14 @@ app.ws("/view/:courseId", (client, req) => {
 		return
 	}
 
+	// TODO: Make sure that the requester has permissions to this course.
+
 	client.tag = "view"
+	client.viewedCourse = req.params.courseId
+
+	displayCourseMembers(client.viewedCourse, (json) => {
+		client.send(json)
+	})
 })
 
 app.post("/endpoint/register", (req, res) => {
@@ -531,7 +585,11 @@ app.post("/endpoint/register", (req, res) => {
 		}))
 
 		// Display the newly created endpoint on every active dashboard.
-		displayNewEndpoint(id)
+		displayEndpoints((json) => {
+			iterateWebsocketClients("dashboard", (client) => {
+				client.send(json)
+			})
+		})
 	}
 })
 
@@ -572,12 +630,11 @@ app.post("/endpoint/memberPresent", (req, res) => {
 	validateEndpointAuthorized(req, res, (result) => {
 		// Make sure that the given tag is associated with a user.
 		db.query(
-			"SELECT name FROM members WHERE tag = $1",
+			"SELECT name, id FROM members WHERE tag = $1",
 			[ req.body.memberTag ],
-			(err, result) => {
-
+			(err, memberResult) => {
 				// If there are no returned rows, no such tag exists.
-				if(result.rows.length === 0)
+				if(memberResult.rows.length === 0)
 				{
 					console.log("Tag", req.body.memberTag, "is not associated with a member")
 
@@ -591,12 +648,12 @@ app.post("/endpoint/memberPresent", (req, res) => {
 				// Check which course the endpoint has currently joined to.
 				db.query(
 					"SELECT currentcourse FROM endpoints WHERE id = $1",
-					[ req.body.endpointId ], (err, result) => {
+					[ req.body.endpointId ], (err, courseResult) => {
 
 						// Make sure that the endpoint is still authorized for the course.
 						db.query(
-							"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
-							[ result.rows[0].currentcourse, req.body.endpointId ],
+							"SELECT id, name FROM courses WHERE id = $1 AND $2 = ANY(endpoints)",
+							[ courseResult.rows[0].currentcourse, req.body.endpointId ],
 							(err, result) => {
 
 								// If nothing was returned, the endpoint is unauthorized for this course.
@@ -608,18 +665,95 @@ app.post("/endpoint/memberPresent", (req, res) => {
 
 								else
 								{
-									console.log("Received status update from", req.body.endpointId, req.body.memberTag)
+									// Make sure that the given user is on the course.
+									db.query(
+										"SELECT id FROM courses WHERE id = $1 AND $2 = ANY(members)",
+										[ courseResult.rows[0].currentcourse, memberResult.rows[0].id ], (err, result) => {
 
-									// TODO: Send name of member associated with the tag.
-									res.status(200)
-									res.send(JSON.stringify({
-										userName: "Test user"
-									}))
+											// If no rows are returned, the member is not found on the selected course.
+											if(result.rows.length === 0)
+											{
+												console.log("Member", memberResult.rows[0].name, "is not on course", courseResult.rows[0].name)
+
+												res.status(202)
+												res.send("Member not on course")
+
+												return
+											}
+
+											console.log("Received status update from", req.body.endpointId, req.body.memberTag, memberResult.rows[0].name)
+
+											// Send the name of the received user to the endpoint.
+											res.status(200)
+											res.send(JSON.stringify({
+												userName: memberResult.rows[0].name
+											}))
+
+											// For each client that's viewing this course, tell that the given member is present.
+											iterateCourseViewers(courseResult.rows[0].currentcourse, (client) => {
+												client.send(JSON.stringify({
+													status: "memberPresent",
+													memberId: memberResult.rows[0].id,
+													memberName: memberResult.rows[0].name,
+												}))
+											})
+										}
+									)
 								}
 							}
 						)
 					}
 				)
+			}
+		)
+	})
+})
+
+app.post("/endpoint/registerMember", (req, res) => {
+	validateEndpointAuthorized(req, res, (result) => {
+		db.query(
+			"INSERT INTO members(id, name, tag) VALUES ($1, $2, $3)",
+			[ req.body.memberId, req.body.memberName, req.body.memberTag ],
+			(err, result) => {
+				if(err)
+				{
+					res.status(403)
+					if(err.detail.startsWith("Key (id)"))
+					{
+						console.log("Invalid id")
+						res.send(JSON.stringify({
+							invalidField: "id"
+						}))
+					}
+
+					else if(err.detail.startsWith("Key (tag)"))
+					{
+						console.log("Invalid tag")
+						res.send(JSON.stringify({
+							invalidField: "tag"
+						}))
+					}
+
+					else
+					{
+						// TODO: Set status as 5xx.
+						res.send(JSON.stringify({
+							invalidField: "unknown"
+						}))
+					}
+				}
+
+				else
+				{
+					res.status(201)
+					res.send("Registered member")
+
+					displayMembers((json) => {
+						iterateWebsocketClients("dashboard", (client) => {
+							client.send(json)
+						})
+					})
+				}
 			}
 		)
 	})
@@ -657,7 +791,6 @@ db.connect((err) => {
 	db.query(`CREATE TABLE IF NOT EXISTS members (
 		id VARCHAR(50) PRIMARY KEY,
 		name VARCHAR(50) NOT NULL,
-		tag VARCHAR(50) NOT NULL
+		tag VARCHAR(50) UNIQUE
 	);`)
-
 })
