@@ -339,6 +339,7 @@ app.ws("/dashboard", (client, req) => {
 	}
 
 	client.tag = "dashboard"
+	client.username = activeSessions[req.cookies.sessionToken].username
 
 	displayMembers((json) => {
 		iterateWebsocketClients("dashboard", (client) => {
@@ -439,15 +440,17 @@ app.ws("/dashboard", (client, req) => {
 				return
 			}
 
+			// The owner of the course.
+			const owner = activeSessions[req.cookies.sessionToken].username
+
 			// If the submitted course is a new course, try to add it.
 			if(cmd.isNewCourse === "true")
 			{
 				db.query(
 					"INSERT INTO courses (id, name, owner, members, endpoints) VALUES ($1, $2, $3, $4, $5)",
-					[cmd.courseId, cmd.courseName, activeSessions[req.cookies.sessionToken].username,
-						cmd.courseMembers, cmd.courseEndpoints],
+					[ cmd.courseId, cmd.courseName, owner, cmd.courseMembers, cmd.courseEndpoints],
 					(err, result) => {
-						onCourseSubmit(client, cmd, true, err, result)
+						onCourseSubmit(client, cmd, true, owner, err, result)
 					}
 				)
 			}
@@ -456,9 +459,9 @@ app.ws("/dashboard", (client, req) => {
 			{
 				db.query(
 					"UPDATE courses set members = $1, endpoints = $2, name = $3 WHERE id = $4 AND owner = $5",
-					[cmd.courseMembers, cmd.courseEndpoints, cmd.courseName, cmd.courseId, activeSessions[req.cookies.sessionToken].username],
+					[cmd.courseMembers, cmd.courseEndpoints, cmd.courseName, cmd.courseId, owner ],
 					(err, result) => {
-						onCourseSubmit(client, cmd, false, err, result)
+						onCourseSubmit(client, cmd, false, owner, err, result)
 					}
 				)
 
@@ -472,7 +475,7 @@ app.ws("/dashboard", (client, req) => {
 	})
 })
 
-function onCourseSubmit(client, cmd, isNew, err, result)
+function onCourseSubmit(client, cmd, isNew, owner, err, result)
 {
 	// TODO: Make sure that the error indicates duplicate key.
 	// Right now this error is assumed.
@@ -496,14 +499,21 @@ function onCourseSubmit(client, cmd, isNew, err, result)
 			status: "endCourseConfig",
 		}))
 
-		client.send(JSON.stringify({
+		const json = JSON.stringify({
 			status: "submitCourse",
 			courseId: cmd.courseId,
 			courseName: cmd.courseName,
 			courseMembers: cmd.courseMembers,
 			courseEndpoints: cmd.courseEndpoints,
 			isNewCourse: isNew
-		}))
+		})
+
+		iterateWebsocketClients("dashboard", (client) => {
+			if(client.username === owner)
+			{
+				client.send(json)
+			}
+		})
 	}
 }
 
