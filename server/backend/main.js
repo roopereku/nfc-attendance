@@ -264,6 +264,12 @@ app.get("/getAvailableCourses", (req, res) => {
 			}
 		)
 	}
+
+	else
+	{
+		res.status(401)
+		res.send("Invalid session token")
+	}
 })
 
 app.post("/getSessionToken", (req, res) => {
