@@ -1,12 +1,17 @@
-function getCookieValue(name)
+function switchToMainMenu()
 {
-	return document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)')?.pop() || ''
+	location.href = "/"
 }
 
-const websocketPath = "/view/" + getCookieValue("courseId")
+const websocketPath = location.pathname
 
 function onWebsocketMessage(msg)
 {
+	if(msg.status === "courseInfo")
+	{
+		document.getElementById("courseName").innerHTML = msg.courseName
+	}
+
 	if(msg.status === "memberSync")
 	{
 		document.getElementById("memberArea").replaceChildren()
@@ -24,7 +29,7 @@ function displayMember(memberId, memberName, isPresent)
 
 	const bg = isPresent ? "btn-success" : "btn-secondary"
 
-	element.className = "btn " + bg + " mx-1 my-1"
+	element.className = "btn " + bg + " mx-2 my-2"
 	element.innerHTML = memberName
 	element.dataset.id = memberId
 

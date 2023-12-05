@@ -530,9 +530,22 @@ function onCourseSubmit(client, cmd, isNew, owner, err, result)
 app.get("/view/:courseId", (req, res) => {
 	if(validateLogin(req, res))
 	{
-		// TODO: Validate course.
-		res.cookie("courseId", req.params.courseId, { sameSite: "Strict" })
-		res.sendFile("/frontend/html/view.html")
+		// Find the requested course if the requester owns it.
+		db.query(
+			"SELECT id FROM courses WHERE id = $1 AND owner = $2",
+			[ req.params.courseId, activeSessions[req.cookies.sessionToken].username ],
+			(err, result) => {
+
+				// If no requester owned course of the given ID is found, go back to the root page.
+				if(result.rows.length === 0)
+				{
+					res.redirect("/")
+					return
+				}
+
+				res.sendFile("/frontend/html/view.html")
+			}
+		)
 	}
 })
 
@@ -544,14 +557,32 @@ app.ws("/view/:courseId", (client, req) => {
 		return
 	}
 
-	// TODO: Make sure that the requester has permissions to this course.
+	// Find the requested course if the requester owns it.
+	db.query(
+		"SELECT name, id FROM courses WHERE id = $1 AND owner = $2",
+		[ req.params.courseId, activeSessions[req.cookies.sessionToken].username ],
+		(err, result) => {
 
-	client.tag = "view"
-	client.viewedCourse = req.params.courseId
+			// If no requester owned course of the given ID is found, go back to the root page.
+			if(result.rows.length === 0)
+			{
+				return
+			}
 
-	displayCourseMembers(client.viewedCourse, (json) => {
-		client.send(json)
-	})
+			client.tag = "view"
+			client.viewedCourse = req.params.courseId
+
+			client.send(JSON.stringify({
+				status: "courseInfo",
+				courseId: result.rows[0].id,
+				courseName: result.rows[0].name,
+			}))
+
+			displayCourseMembers(client.viewedCourse, (json) => {
+				client.send(json)
+			})
+		}
+	)
 })
 
 app.post("/endpoint/register", (req, res) => {
