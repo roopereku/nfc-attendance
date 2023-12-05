@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -298,21 +299,25 @@ class MainActivity : ComponentActivity() {
 fun HandleRegistration(callback: (String, String, (String) -> Unit) -> Unit) {
     val context = LocalContext.current
 
-    Column {
-        Text("Tag is not recognized. Do you want to register it?")
+    Centered {
+        Column {
+            LargeText("Tag is not recognized.")
 
-        Button(onClick = {
-            (context as MainActivity).setContent {
-                ShowRegistration(callback)
+            Row {
+                Button(
+                    onClick = { (context as MainActivity).setContent { ShowRegistration(callback) } },
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text("Register it")
+                }
+
+                Button(
+                    onClick = { (context as MainActivity).startAcceptingTags() },
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text("Go back")
+                }
             }
-        }) {
-            Text("Yes")
-        }
-
-        Button(onClick = {
-            (context as MainActivity).startAcceptingTags()
-        }) {
-            Text("No")
         }
     }
 }
@@ -324,28 +329,30 @@ fun ShowRegistration(callback: (String, String, (String) -> Unit) -> Unit) {
     var memberId by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
 
-    Column {
-        OutlinedTextField(
-            value = memberName,
-            onValueChange = { memberName = it },
-            label = { Text("Your name") }
-        )
+    Centered {
+        Column {
+            OutlinedTextField(
+                value = memberName,
+                onValueChange = { memberName = it },
+                label = { Text("Your name") }
+            )
 
-        OutlinedTextField(
-            value = memberId,
-            onValueChange = { memberId = it },
-            label = { Text("Your student ID") }
-        )
+            OutlinedTextField(
+                value = memberId,
+                onValueChange = { memberId = it },
+                label = { Text("Your student ID") }
+            )
 
-        Button(onClick = {
-            callback(memberName, memberId) {
-                error = it
+            Button(onClick = {
+                callback(memberName, memberId) {
+                    error = it
+                }
+            }) {
+                Text("Register")
             }
-        }) {
-            Text("Register")
-        }
 
-        Text(error)
+            Text(error)
+        }
     }
 }
 
