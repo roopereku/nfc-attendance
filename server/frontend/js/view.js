@@ -12,17 +12,19 @@ function onWebsocketMessage(msg)
 		document.getElementById("memberArea").replaceChildren()
 
 		msg.members.forEach((member) => {
-			displayMember(member.id, member.name)
+			displayMember(member.id, member.name, member.isPresent)
 		})
 	}
 }
 
-function displayMember(memberId, memberName)
+function displayMember(memberId, memberName, isPresent)
 {
 	const element = document.createElement("button")
 	const area = document.getElementById("memberArea")
 
-	element.className = "btn btn-secondary mx-1 my-1"
+	const bg = isPresent ? "btn-success" : "btn-secondary"
+
+	element.className = "btn " + bg + " mx-1 my-1"
 	element.innerHTML = memberName
 	element.dataset.id = memberId
 

@@ -715,6 +715,7 @@ app.post("/endpoint/memberPresent", (req, res) => {
 
 													// For each client that's viewing this course, update the member info.
 													displayCourseMembers(courseResult.rows[0].currentcourse, (json) => {
+														// TODO: Instead of "memberSync", a more lightweight state change message could be used.
 														iterateCourseViewers(courseResult.rows[0].currentcourse, (client) => {
 															client.send(json)
 														})
@@ -723,6 +724,7 @@ app.post("/endpoint/memberPresent", (req, res) => {
 													// Is the member joining another course?
 													if(memberResult.rows[0].currentcourse !== courseResult.rows[0].currentcourse)
 													{
+														// TODO: Instead of "memberSync", a more lightweight state change message could be used.
 														displayCourseMembers(memberResult.rows[0].currentcourse, (json) => {
 															iterateCourseViewers(memberResult.rows[0].currentcourse, (client) => {
 																client.send(json)
