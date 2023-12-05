@@ -156,10 +156,18 @@ function displayCourseMembers(courseId, callback)
 			// Is there anything to show?
 			if(result.rows.length !== 0)
 			{
-				// Find the names and ids of the course members.
+				// Find information about the course members.
 				db.query(
-					"SELECT name, id FROM members WHERE id = ANY($1)",
+					"SELECT name, id, currentcourse FROM members WHERE id = ANY($1)",
 					[ result.rows[0].members ], (err, result) => {
+						result.rows.sort((a,b) => a.name - b.name)
+
+						// Don't expose the current course of any member.
+						result.rows.forEach((row) => {
+							row.isPresent = row.currentcourse === courseId
+							row.currentcourse
+						})
+
 						const json = JSON.stringify({
 							status: "memberSync",
 							members: result.rows
@@ -178,6 +186,8 @@ function displayMembers(callback)
 	db.query(
 		"SELECT name, id FROM members",
 		(err, result) => {
+			result.rows.sort((a,b) => a.name - b.name)
+
 			const json = JSON.stringify({
 				status: "memberSync",
 				members: result.rows
@@ -640,7 +650,7 @@ app.post("/endpoint/memberPresent", (req, res) => {
 	validateEndpointAuthorized(req, res, (result) => {
 		// Make sure that the given tag is associated with a user.
 		db.query(
-			"SELECT name, id FROM members WHERE tag = $1",
+			"SELECT name, id, currentcourse FROM members WHERE tag = $1",
 			[ req.body.memberTag ],
 			(err, memberResult) => {
 				// If there are no returned rows, no such tag exists.
@@ -683,30 +693,44 @@ app.post("/endpoint/memberPresent", (req, res) => {
 											// If no rows are returned, the member is not found on the selected course.
 											if(result.rows.length === 0)
 											{
-												console.log("Member", memberResult.rows[0].name, "is not on course", courseResult.rows[0].name)
-
 												res.status(202)
 												res.send("Member not on course")
 
 												return
 											}
 
-											console.log("Received status update from", req.body.endpointId, req.body.memberTag, memberResult.rows[0].name)
+											// TODO: Log the member course activity in the database.
 
-											// Send the name of the received user to the endpoint.
-											res.status(200)
-											res.send(JSON.stringify({
-												userName: memberResult.rows[0].name
-											}))
+											// Update the current course of the member.
+											db.query(
+												"UPDATE members SET currentcourse = $1 WHERE id = $2",
+												[ courseResult.rows[0].currentcourse, memberResult.rows[0].id ],
+												(err, result) => {
 
-											// For each client that's viewing this course, tell that the given member is present.
-											iterateCourseViewers(courseResult.rows[0].currentcourse, (client) => {
-												client.send(JSON.stringify({
-													status: "memberPresent",
-													memberId: memberResult.rows[0].id,
-													memberName: memberResult.rows[0].name,
-												}))
-											})
+													// Send the name of the received user to the endpoint.
+													res.status(200)
+													res.send(JSON.stringify({
+														userName: memberResult.rows[0].name
+													}))
+
+													// For each client that's viewing this course, update the member info.
+													displayCourseMembers(courseResult.rows[0].currentcourse, (json) => {
+														iterateCourseViewers(courseResult.rows[0].currentcourse, (client) => {
+															client.send(json)
+														})
+													})
+
+													// Is the member joining another course?
+													if(memberResult.rows[0].currentcourse !== courseResult.rows[0].currentcourse)
+													{
+														displayCourseMembers(memberResult.rows[0].currentcourse, (json) => {
+															iterateCourseViewers(memberResult.rows[0].currentcourse, (client) => {
+																client.send(json)
+															})
+														})
+													}
+												}
+											)
 										}
 									)
 								}
@@ -801,6 +825,7 @@ db.connect((err) => {
 	db.query(`CREATE TABLE IF NOT EXISTS members (
 		id VARCHAR(50) PRIMARY KEY,
 		name VARCHAR(50) NOT NULL,
-		tag VARCHAR(50) UNIQUE
+		tag VARCHAR(50) UNIQUE,
+		currentcourse VARCHAR(50)
 	);`)
 })
