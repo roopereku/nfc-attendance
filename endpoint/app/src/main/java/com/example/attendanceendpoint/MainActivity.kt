@@ -11,25 +11,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme.typography
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,14 +33,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.FileNotFoundException
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
+
+
 
 fun sendRequest(serverUrl: String, callback: (client: HttpURLConnection, result: String?) -> Unit) {
     val prefix = "https://"
@@ -59,13 +53,15 @@ fun sendRequest(serverUrl: String, callback: (client: HttpURLConnection, result:
             var result : String? = ""
 
             try {
-                inputStream.bufferedReader().use {
+                val stream = if(responseCode <= 399) inputStream else errorStream
+
+                stream.bufferedReader().use {
                     it.lines().forEach { line ->
                         result += line
                     }
                 }
             } catch(err: FileNotFoundException) {
-                println(err)
+                println("Error during receiving $err")
             }
 
             callback.invoke(this, result)
@@ -103,6 +99,20 @@ fun sendPostRequest(serverUrl: String, json: String, callback: (client: HttpURLC
 class MainActivity : ComponentActivity() {
     private var nfc : NfcAdapter? = null
 
+    fun transition(before: @Composable() () -> Unit, after: @Composable() () -> Unit, millis: Long) {
+        setContent {
+            before()
+
+            Handler().postDelayed(
+                {
+                    setContent {
+                        after()
+                    }
+                }, millis
+            )
+        }
+    }
+
     private fun onAdapterInvalid() {
         if(nfc == null) {
             Log.e("NFC", "Adapter is null")
@@ -137,8 +147,6 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        Log.i("STATUS", "Got intent")
-
         if (NfcAdapter.ACTION_TAG_DISCOVERED == intent?.action) {
             var st = ""
             val msg = intent.getByteArrayExtra(NfcAdapter.EXTRA_ID)
@@ -165,18 +173,27 @@ class MainActivity : ComponentActivity() {
                 when(http.responseCode) {
                     200 -> {
                         val json = JSONObject(result)
+                        transition(
+                            before = { CenteredText("Hello ${json.getString("userName")}") },
+                            after = { StandbyMode() },
+                            2000
+                        )
+                    }
 
-                        setContent {
-                            stateChanged("Hello ${json.getString("userName")}")
+                    202 -> {
+                        transition(
+                            before = { CenteredText("You are not on this course") },
+                            after = { StandbyMode() },
+                            2000
+                        )
+                    }
 
-                            Handler().postDelayed(
-                                {
-                                    setContent {
-                                        StandbyMode()
-                                    }
-                                }, 2000
-                            )
-                        }
+                    401 -> {
+                        transition(
+                            before = { CenteredText("Endpoint is blocked") },
+                            after = { StandbyMode() },
+                            2000
+                        )
                     }
 
                     404 -> {
@@ -184,11 +201,49 @@ class MainActivity : ComponentActivity() {
                         readyForTags = false
 
                         setContent {
-                            HandleRegistration() { memberName, memberId ->
+                            HandleRegistration() { memberName, memberId, errorCallback ->
                                 println("Register $memberName $memberId $st")
+                                val json = """
+                                {
+                                    "endpointId" : "${prefs.getString("EndpointID", "")}",
+                                    "memberTag": "$st",
+                                    "memberName": "$memberName",
+                                    "memberId": "$memberId"
+                                }
+                                """
 
                                 sendPostRequest("$address/endpoint/registerMember", json) { http, result ->
-                                    println("Register member returned ${http.responseCode}")
+                                    when(http.responseCode) {
+                                        // "201 Created" indicates that the registration was successful.
+                                        201 -> {
+                                            // TODO: Ask if member should be added to the current course?
+                                            // TODO: Retry the memberPresent request?
+                                            startAcceptingTags()
+                                        }
+
+                                        // "403 Forbidden" indicates that the ID or tag was invalid.
+                                        403 -> {
+                                            val json = JSONObject(result)
+
+                                            when(json.getString("invalidField")) {
+                                                "id" -> {
+                                                    errorCallback("ID is already in use")
+                                                }
+
+                                                "tag" -> {
+                                                    errorCallback("Tag is already in use")
+                                                }
+                                            }
+                                        }
+
+                                        401 -> {
+                                            transition(
+                                                before = { CenteredText("Endpoint is blocked") },
+                                                after = { (LocalContext.current as MainActivity).startAcceptingTags() },
+                                                2000
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -240,7 +295,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun HandleRegistration(callback: (String, String) -> Unit) {
+fun HandleRegistration(callback: (String, String, (String) -> Unit) -> Unit) {
     val context = LocalContext.current
 
     Column {
@@ -264,9 +319,10 @@ fun HandleRegistration(callback: (String, String) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShowRegistration(callback: (String, String) -> Unit) {
+fun ShowRegistration(callback: (String, String, (String) -> Unit) -> Unit) {
     var memberName by remember { mutableStateOf("") }
     var memberId by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
 
     Column {
         OutlinedTextField(
@@ -282,10 +338,14 @@ fun ShowRegistration(callback: (String, String) -> Unit) {
         )
 
         Button(onClick = {
-            callback(memberName, memberId)
+            callback(memberName, memberId) {
+                error = it
+            }
         }) {
             Text("Register")
         }
+
+        Text(error)
     }
 }
 
@@ -298,67 +358,71 @@ fun ConfigureConnection() {
 
     var text by remember { mutableStateOf(default) }
 
-    Column {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            label = { Text("Label") }
-        )
+    Centered {
+        Column {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Label") }
+            )
 
-        Button(onClick = {
-            val editor = prefs.edit();
-            editor.putString("ServerAddress", text);
-            editor.apply();
+            Button(onClick = {
+                val editor = prefs.edit();
+                editor.putString("ServerAddress", text);
+                editor.apply();
 
-            var json = "{}"
+                var json = "{}"
 
-            // If an ID is already stored, send it to the backend.
-            if(prefs.contains("EndpointID"))
-            {
-                json = """
+                // If an ID is already stored, send it to the backend.
+                if (prefs.contains("EndpointID")) {
+                    json = """
                 {
                     "endpointId" : "${prefs.getString("EndpointID", "")}"
                 }
                 """.trimIndent()
-            }
+                }
 
-            sendPostRequest("$text/endpoint/register", json) { http, result ->
-                println("Got response ${http.responseCode}")
+                sendPostRequest("$text/endpoint/register", json) { http, result ->
+                    println("Got response ${http.responseCode}")
 
-                when(http.responseCode) {
-                    // "401 Unauthorized" indicates that this endpoint is blocked.
-                    401 -> {
-                        // TODO: Visually show blocked state.
-                        println("I am blocked :-(")
-                    }
-
-                    // "201 Created" indicates that this endpoint now waits for authorization.
-                    201 -> {
-                        val json = JSONObject(result)
-
-                        editor.putString("EndpointID", json.getString("endpointId"));
-                        editor.apply();
-
-                        // TODO: Visually show waiting state.
-                        println("I am waiting!")
-                    }
-
-                    // "200 OK" indicates that this endpoint is ready to join a course.
-                    200 -> {
-                        val json = JSONObject(result)
-
-                        val activity = context as MainActivity
-                        activity.setContent {
-                            ConfigureCourse(json.getJSONObject("availableCourses"))
+                    when (http.responseCode) {
+                        401 -> {
+                            (context as MainActivity).transition(
+                                before = { CenteredText("Endpoint is blocked") },
+                                after = { ConfigureConnection() },
+                                2000
+                            )
                         }
 
-                        //activity.startAcceptingTags()
+                        // "201 Created" indicates that this endpoint now waits for authorization.
+                        201 -> {
+                            val json = JSONObject(result)
+
+                            editor.putString("EndpointID", json.getString("endpointId"));
+                            editor.apply();
+
+                            (context as MainActivity).transition(
+                                before = { CenteredText("Waiting to be authorized") },
+                                after = { ConfigureConnection() },
+                                2000
+                            )
+                        }
+
+                        // "200 OK" indicates that this endpoint is ready to join a course.
+                        200 -> {
+                            val json = JSONObject(result)
+
+                            val activity = context as MainActivity
+                            activity.setContent {
+                                ConfigureCourse(json.getJSONObject("availableCourses"))
+                            }
+                        }
                     }
                 }
-            }
 
-        }) {
-            Text("Connect to the server")
+            }) {
+                Text("Connect to the server")
+            }
         }
     }
 }
@@ -373,64 +437,76 @@ fun ConfigureCourse(courses: JSONObject) {
         courseNames.add("${courseData.getString("courseName")} ($key)")
     }
 
-    if(courseNames.isEmpty()) {
-        Text("No courses available")
-        return
-    }
-
-    var selectedId: String? = null
-
-    Column {
-        ShowDropDownMenu(courseNames, "Select a course") { item, index ->
-            courses.keys().withIndex().forEach {
-                if(it.index == index)
-                {
-                    selectedId = it.value
-                }
-            }
+    Centered {
+        if (courseNames.isEmpty()) {
+            (LocalContext.current as MainActivity).transition(
+                before = { CenteredText("No courses available") },
+                after = { ConfigureConnection() },
+                3000
+            )
+            
+            return@Centered
         }
 
-        Button(onClick = {
-            val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
-            val address: String = prefs.getString("ServerAddress", "")!!
+        var selectedId: String? = null
 
-            if (address.isEmpty()) {
-                Log.e("STATUS", "Server address is empty")
-                return@Button
+        Column {
+            ShowDropDownMenu(courseNames, "Select a course") { item, index ->
+                courses.keys().withIndex().forEach {
+                    if (it.index == index) {
+                        selectedId = it.value
+                    }
+                }
             }
 
-            if (selectedId == null) {
-                Log.e("STATUS", "No course selected")
-                return@Button
-            }
+            Button(onClick = {
+                val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
+                val address: String = prefs.getString("ServerAddress", "")!!
 
-            val json = """
+                if (address.isEmpty()) {
+                    Log.e("STATUS", "Server address is empty")
+                    return@Button
+                }
+
+                if (selectedId == null) {
+                    Log.e("STATUS", "No course selected")
+                    return@Button
+                }
+
+                val json = """
             {
                 "endpointId" : "${prefs.getString("EndpointID", "")}",
                 "courseId": "$selectedId"
             }
             """.trimIndent()
 
-            sendPostRequest("$address/endpoint/join", json) { http, result ->
-                when(http.responseCode) {
-                    // If the endpoint successfully joins a course, start accepting NFC tags.
-                    200 -> {
-                        (context as MainActivity).startAcceptingTags()
-                    }
+                sendPostRequest("$address/endpoint/join", json) { http, result ->
+                    when (http.responseCode) {
+                        // If the endpoint successfully joins a course, start accepting NFC tags.
+                        200 -> {
+                            (context as MainActivity).startAcceptingTags()
+                        }
 
-                    403 -> {
-                        // TODO: Tell user that this endpoint isn't authorized for course.
-                        println("Not authorized to course")
-                    }
+                        403 -> {
+                            (context as MainActivity).transition(
+                                before = { CenteredText("Endpoint isn't authorized for this course") },
+                                after = { ConfigureConnection() },
+                                2000
+                            )
+                        }
 
-                    401 -> {
-                        // TODO: Tell user that this endpoint isn't authorized.
-                        println("Not authorized when joining a course")
+                        401 -> {
+                            (context as MainActivity).transition(
+                                before = { CenteredText("Endpoint isn't authorized") },
+                                after = { ConfigureConnection() },
+                                2000
+                            )
+                        }
                     }
                 }
+            }) {
+                Text("Join course")
             }
-        }) {
-            Text("Join course")
         }
     }
 }
@@ -482,13 +558,10 @@ fun ShowDropDownMenu(strings: List<String>, initial: String, onSelected: (String
 }
 
 @Composable
-fun stateChanged(newState: String) {
-    LargeText(newState)
-}
-
-@Composable
 fun StandbyMode() {
-    LargeText("Scan your NFC tag")
+    Centered {
+        LargeText("Scan your NFC tag")
+    }
 }
 
 @Composable
@@ -503,5 +576,26 @@ fun LargeText(text: String) {
 
 @Composable
 fun InvalidAdapter(reason: String) {
-    LargeText(reason)
+    Centered {
+        LargeText(reason)
+    }
+}
+
+@Composable
+fun Centered(content: @Composable() () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun CenteredText(text: String) {
+    Centered {
+        LargeText(text = text)
+    }
 }
