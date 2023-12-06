@@ -1,7 +1,7 @@
-console.log("Websocket connecting to", location.hostname + websocketPath)
-
 const protocol = location.protocol === "https:" ? "wss" : "ws"
 const ws = new WebSocket(protocol + "://" + location.hostname + websocketPath)
+
+console.log("Websocket connecting to", protocol + "://" + location.hostname + websocketPath)
 
 ws.addEventListener("open", (e) => {
 });
