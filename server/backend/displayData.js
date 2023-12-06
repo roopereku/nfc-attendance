@@ -18,7 +18,7 @@ module.exports.courseMembers = (courseId, callback) => {
 						// Don't expose the current course of any member.
 						result.rows.forEach((row) => {
 							row.isPresent = row.currentcourse === courseId
-							row.currentcourse
+							delete row.currentcourse
 						})
 
 						const json = JSON.stringify({
@@ -35,11 +35,9 @@ module.exports.courseMembers = (courseId, callback) => {
 }
 
 module.exports.allMembers = (callback) => {
-	console.log("start displayAllMembers")
 	db.query(
 		"SELECT name, id FROM members",
 		(err, result) => {
-		console.log("displayAllMembers query result ->", result.rows)
 			result.rows.sort((a,b) => a.name - b.name)
 
 			const json = JSON.stringify({
@@ -50,13 +48,17 @@ module.exports.allMembers = (callback) => {
 			callback(json)
 		}
 	)
-	console.log("finish displayAllMembers")
 }
 
 module.exports.endpoints = (callback) => {
 	db.query(
 		"SELECT id, status FROM endpoints",
 		(err, result) => {
+			// Don't expose the current course of any member.
+			result.rows.forEach((row) => {
+				delete row.currentcourse
+			})
+
 			const json = JSON.stringify({
 				status: "endpointSync",
 				endpoints: result.rows

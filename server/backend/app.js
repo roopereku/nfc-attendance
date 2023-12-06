@@ -1,12 +1,42 @@
+const schedule = require("node-schedule")
 const websocket = require("express-ws")
 const express = require("express")
 const cookieParser = require("cookie-parser")
 const bodyParser = require("body-parser")
 const crypto = require("crypto")
 const db = require("./database")
+const display = require("./displayData")
 
 const app = express()
 const ws = websocket(app)
+
+// The state of members is flushed at midnight.
+const flushRule = new schedule.RecurrenceRule()
+flushRule.hour = 0
+flushRule.minute = 0
+
+const flushJob = schedule.scheduleJob(flushRule, () => {
+	// Null the current course of every member.
+	db.query(
+		"UPDATE members SET currentcourse = $1",
+		[ null ], (err, result) => {
+
+			// Get the ID of every course.
+			db.query("SELECT id FROM courses", (err, result) => {
+				result.rows.forEach((row) => {
+
+					// Send a member sync to every course viewer. Since the current course of every
+					// member is now null, isPresent should be false.
+					display.courseMembers(row.id, (json) => {
+						module.exports.iterateCourseViewers(row.id, (client) => {
+							client.send(json)
+						})
+					})
+				})
+			})
+		}
+	)
+})
 
 // List of active sessions. This information doesn't have to be stored in the
 // database as it isn't persistent across multiple backend runs.
