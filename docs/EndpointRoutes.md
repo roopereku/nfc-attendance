@@ -5,7 +5,13 @@ Registers an endpoint to a backend.
 
 ### Body
 
-If the endpoint hasn't yet received an ID from the backend, the body should be left empty.
+If the endpoint hasn't yet received an ID from the backend, the body should contain the endpoint name.
+
+```json
+{
+    "endpointName": "ENDPOINTNAME"
+}
+```
 
 If the endpoint has received an ID from the backend it should be supplied in the body.
 

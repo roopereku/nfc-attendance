@@ -374,10 +374,54 @@ fun ShowRegistration(callback: (String, String, (String) -> Unit) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun ConfigureName() {
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
+
+    var text by remember { mutableStateOf("") }
+
+    Centered {
+        Column {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Endpoint name") }
+            )
+
+            Button(onClick = {
+                if(text.isEmpty()) {
+                    return@Button
+                }
+
+                val editor = prefs.edit()
+                editor.putString("EndpointName", text);
+                editor.apply();
+
+                (context as MainActivity).setContent {
+                    ConfigureConnection()
+                }
+
+            }) {
+                Text("Set endpoint name")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun ConfigureConnection() {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("ConfigurationPreferences", 0)
     val default : String = prefs.getString("ServerAddress", "")!!
+
+    if (!prefs.contains("EndpointName")) {
+        (context as MainActivity).setContent {
+            ConfigureName()
+        }
+
+        return
+    }
 
     var text by remember { mutableStateOf(default) }
 
@@ -386,7 +430,7 @@ fun ConfigureConnection() {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("Label") }
+                label = { Text("Server address") }
             )
 
             Button(onClick = {
@@ -394,15 +438,21 @@ fun ConfigureConnection() {
                 editor.putString("ServerAddress", text);
                 editor.apply();
 
-                var json = "{}"
+                var json = ""
 
                 // If an ID is already stored, send it to the backend.
                 if (prefs.contains("EndpointID")) {
                     json = """
-                {
-                    "endpointId" : "${prefs.getString("EndpointID", "")}"
-                }
-                """.trimIndent()
+                    {
+                        "endpointId" : "${prefs.getString("EndpointID", "")}"
+                    }
+                    """.trimIndent()
+                } else {
+                    json = """
+                    {
+                        "endpointName" : "${prefs.getString("EndpointName", "")}"
+                    }
+                    """.trimIndent()
                 }
 
                 sendPostRequest("$text/endpoint/register", json) { http, result ->
@@ -520,7 +570,7 @@ fun ConfigureCourse(courses: JSONObject) {
 
                         401 -> {
                             (context as MainActivity).transition(
-                                before = { CenteredText("Endpoint isn't authorized") },
+                                before = { CenteredText("Endpoint is blocked") },
                                 after = { ConfigureConnection() },
                                 2000
                             )
