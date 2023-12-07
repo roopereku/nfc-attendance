@@ -9,6 +9,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -175,7 +177,14 @@ class MainActivity : ComponentActivity() {
                     200 -> {
                         val json = JSONObject(result)
                         transition(
-                            before = { CenteredText("Hello ${json.getString("userName")}") },
+                            before = {
+                                Background(color = Color(0xFF1E631E)) {
+                                    CenteredText(
+                                        "Hello ${json.getString("userName")}",
+                                        color = Color.White
+                                    )
+                                }
+                            },
                             after = { StandbyMode() },
                             2000
                         )
@@ -183,7 +192,14 @@ class MainActivity : ComponentActivity() {
 
                     202 -> {
                         transition(
-                            before = { CenteredText("You are not on this course") },
+                            before = {
+                                Background(color = Color( 0xFF630012 )) {
+                                    CenteredText(
+                                        "You are not on this course",
+                                        color = Color.White
+                                    )
+                                }
+                            },
                             after = { StandbyMode() },
                             2000
                         )
@@ -572,12 +588,13 @@ fun StandbyMode() {
 }
 
 @Composable
-fun LargeText(text: String) {
+fun LargeText(text: String, color: Color = Color.Black) {
     Text(
         text = text,
         modifier = Modifier.padding(16.dp),
         textAlign = TextAlign.Center,
-        style = typography.titleLarge
+        style = typography.titleLarge,
+        color = color
     )
 }
 
@@ -601,8 +618,23 @@ fun Centered(content: @Composable() () -> Unit) {
 }
 
 @Composable
-fun CenteredText(text: String) {
+fun Background(color: Color, content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(color)
+    )
+    {
+        content()
+    }
+}
+
+@Composable
+fun CenteredText(text: String, color: Color = Color.Black) {
     Centered {
-        LargeText(text = text)
+        LargeText(
+            text = text,
+            color = color
+        )
     }
 }
