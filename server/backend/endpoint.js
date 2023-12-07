@@ -105,7 +105,6 @@ router.post("/register", (req, res) => {
 				"SELECT * FROM courses WHERE $1 = ANY(endpoints)",
 				[ req.body.endpointId ],
 				(err, result) => {
-					console.log("IN registered", result.rows)
 					courses = {}
 
 					result.rows.forEach((row) => {
@@ -126,28 +125,39 @@ router.post("/register", (req, res) => {
 	// The endpoint didn't supply an ID. Generate a new one and send it.
 	else
 	{
+		if(!("endpointName" in req.body))
+		{
+			res.status(401)
+			res.send("Missing endpoint name")
+
+			return
+		}
+
 		const id = crypto.randomBytes(16).toString("hex")
 		console.log("Create new ID", id)
 
 		// Add the newly created endpoint ID to the database as a waiting endpoint.
 		db.query(
-			"INSERT INTO endpoints(id, status) VALUES($1, $2)",
-			[ id, "waiting" ]
+			"INSERT INTO endpoints(id, name, status) VALUES($1, $2, $3)",
+			[ id, req.body.endpointName, "waiting" ],
+			(err, result) => {
+				// TODO: Handle the unlikely case of a duplicate ID.
+
+				// Respond with "201 Created" to indicate that the
+				// endpoint is still waiting for authorization.
+				res.status(201)
+				res.send(JSON.stringify({
+					endpointId: id
+				}))
+
+				// Display the newly created endpoint on every active dashboard.
+				display.endpoints((json) => {
+					app.iterateWebsocketClients("dashboard", (client) => {
+						client.send(json)
+					})
+				})
+			}
 		)
-
-		// Respond with "201 Created" to indicate that the
-		// endpoint is still waiting for authorization.
-		res.status(201)
-		res.send(JSON.stringify({
-			endpointId: id
-		}))
-
-		// Display the newly created endpoint on every active dashboard.
-		display.endpoints((json) => {
-			app.iterateWebsocketClients("dashboard", (client) => {
-				client.send(json)
-			})
-		})
 	}
 })
 

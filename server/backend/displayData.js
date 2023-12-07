@@ -52,13 +52,8 @@ module.exports.allMembers = (callback) => {
 
 module.exports.endpoints = (callback) => {
 	db.query(
-		"SELECT id, status FROM endpoints",
+		"SELECT id, name, status FROM endpoints",
 		(err, result) => {
-			// Don't expose the current course of any member.
-			result.rows.forEach((row) => {
-				delete row.currentcourse
-			})
-
 			const json = JSON.stringify({
 				status: "endpointSync",
 				endpoints: result.rows
