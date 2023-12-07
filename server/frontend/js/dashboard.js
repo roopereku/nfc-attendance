@@ -26,7 +26,7 @@ function switchToMainMenu()
 	location.href = "/"
 }
 
-function addWaitingEndpoint(id)
+function addWaitingEndpoint(id, name)
 {
 	const endpointList = document.getElementById("endpointList")
 
@@ -36,7 +36,7 @@ function addWaitingEndpoint(id)
 
 	const title = document.createElement("h5")
 	title.className = "text-light text-center"
-	title.innerHTML = id
+	title.innerHTML = name
 
 	const buttons = document.createElement("div")
 	buttons.className = "d-flex justify-content-center my-1"
@@ -82,12 +82,12 @@ function onWebsocketMessage(msg)
 		msg.endpoints.forEach((endpoint) => {
 			if(endpoint.status === "waiting")
 			{
-				addWaitingEndpoint(endpoint.id)
+				addWaitingEndpoint(endpoint.id, endpoint.name)
 			}
 
 			else if(endpoint.status === "authorized")
 			{
-				addAuthorizedEndpoint(endpoint.id)
+				addAuthorizedEndpoint(endpoint.id, endpoint.name)
 			}
 		})
 	}
@@ -175,7 +175,7 @@ function addCourse(courseId, courseName, courseMembers, courseEndpoints)
 	})
 }
 
-function addAuthorizedEndpoint(endpointId)
+function addAuthorizedEndpoint(endpointId, endpointName)
 {
 	const endpointsList = document.getElementById("endpointsList")
 	const item = document.createElement("li")
@@ -184,7 +184,7 @@ function addAuthorizedEndpoint(endpointId)
 	checkbox.className = "from-check-input mx-1"
 	checkbox.type = "checkbox"
 
-	const name = document.createTextNode(endpointId)
+	const name = document.createTextNode(endpointName)
 	item.className = "list-group-item endpointEntry"
 
 	item.appendChild(checkbox)

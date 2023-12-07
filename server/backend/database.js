@@ -19,6 +19,7 @@ db.connect((err) => {
 	// Ensure the "endpoints" table exists.
 	db.query(`CREATE TABLE IF NOT EXISTS endpoints (
 		id VARCHAR(50) PRIMARY KEY,
+		name VARCHAR(50) NOT NULL,
 		status VARCHAR(50) NOT NULL,
 		currentcourse VARCHAR(50)
 	);`)
