@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
 
             val json = """
             {
-                "endpointId" : "${prefs.getString("EndpointID", "")}",
+                "endpointId" : "${prefs.getString("EndpointID-$address", "")}",
                 "memberTag": "$st"
             }
             """.trimIndent()
@@ -222,7 +222,7 @@ class MainActivity : ComponentActivity() {
                                 println("Register $memberName $memberId $st")
                                 val json = """
                                 {
-                                    "endpointId" : "${prefs.getString("EndpointID", "")}",
+                                    "endpointId" : "${prefs.getString("EndpointID-$address", "")}",
                                     "memberTag": "$st",
                                     "memberName": "$memberName",
                                     "memberId": "$memberId"
@@ -441,10 +441,10 @@ fun ConfigureConnection() {
                 var json = ""
 
                 // If an ID is already stored, send it to the backend.
-                if (prefs.contains("EndpointID")) {
+                if (prefs.contains("EndpointID-$text")) {
                     json = """
                     {
-                        "endpointId" : "${prefs.getString("EndpointID", "")}"
+                        "endpointId" : "${prefs.getString("EndpointID-$text", "")}"
                     }
                     """.trimIndent()
                 } else {
@@ -471,7 +471,7 @@ fun ConfigureConnection() {
                         201 -> {
                             val json = JSONObject(result)
 
-                            editor.putString("EndpointID", json.getString("endpointId"));
+                            editor.putString("EndpointID-$text", json.getString("endpointId"));
                             editor.apply();
 
                             (context as MainActivity).transition(
@@ -548,7 +548,7 @@ fun ConfigureCourse(courses: JSONObject) {
 
                 val json = """
             {
-                "endpointId" : "${prefs.getString("EndpointID", "")}",
+                "endpointId" : "${prefs.getString("EndpointID-$address", "")}",
                 "courseId": "$selectedId"
             }
             """.trimIndent()
