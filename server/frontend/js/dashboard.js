@@ -234,6 +234,13 @@ function displayCourseConfig(isNewCourse, courseData = undefined)
 
 	submit.dataset.newCourse = isNewCourse
 
+	const toValidate = courseConfig.getElementsByClassName("needs-validation")
+	for (const [key, value] of Object.entries(toValidate))
+	{
+		value.classList.remove("is-invalid")
+		value.classList.remove("is-valid")
+	}
+
 	if(isNewCourse)
 	{
 		title.innerHTML = "Add a new course"
