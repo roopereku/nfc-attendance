@@ -8,6 +8,22 @@ if [ -z "$DOMAIN_NAME" ]; then
 	exit 1
 fi
 
+# Check if docker is in PATH.
+if ! command -v docker &> /dev/null
+then
+	echo "Docker cannot be located?"
+
+	# Ask the user whether they want to install it through a script.
+	read -p "Install docker through the install script? [y/n] " -n 1 -r
+	echo
+	if [[ $REPLY =~ ^[Yy]$ ]]
+	then
+		echo "Installing docker through the install script."
+		curl -fsSL https://get.docker.com -o get-docker.sh
+		sudo sh get-docker.sh
+	fi
+fi
+
 # Create necessary files and directories.
 mkdir -p certbot/www
 mkdir -p certbot/conf
@@ -18,7 +34,6 @@ mkdir -p nginx
 sed template/nginx_pre_ssl.conf -e "s/__CONFIG_DOMAIN__/$DOMAIN_NAME/g" > nginx/nginx.conf
 
 # TODO: Make sure that the user is in docker group.
-# TODO: Use dockers own install script if docker doesn't exist.
 
 # Startup Nginx for certbot challenge.
 docker compose up -d nginx
